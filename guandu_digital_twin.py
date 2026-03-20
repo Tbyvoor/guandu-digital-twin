@@ -443,7 +443,6 @@ df      = generate_history(60)
 latest  = df.groupby("buoy_id").last().reset_index()
 now_str = datetime.now().strftime("%d %b %Y, %H:%M")
 
-st.cache_resource.clear()
 with st.spinner("XGBoost modellen trainen op historische data..."):
     xgb_models, xgb_metrics = train_xgb_models(df)
 
