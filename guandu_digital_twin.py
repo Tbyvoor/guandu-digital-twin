@@ -313,6 +313,7 @@ def generate_history(days=60, seed=42):
                 "solar": round(solar, 1),
                 "algae": round(algae, 1), "geosmin": round(geo, 1),
                 "chlorophyl": round(algae * 0.8 + np.random.normal(0, 2), 1),
+                "treatment": round(treatment_val, 3),
             })
     return pd.DataFrame(records)
 
@@ -333,7 +334,8 @@ def add_features(df_b, treatment=0.7):
     d["lag_7"]          = d["algae"].shift(7)
     d["rolling_mean_7"] = d["algae"].shift(1).rolling(7, min_periods=1).mean()
     d["rolling_std_7"]  = d["algae"].shift(1).rolling(7, min_periods=1).std().fillna(0)
-    d["treatment"]      = treatment
+    if "treatment" not in d.columns:
+        d["treatment"] = treatment
     if "solar" not in d.columns:
         d["solar"] = d["day_of_year"].apply(seasonal_solar)
     return d.dropna(subset=["lag_7"])
@@ -1020,10 +1022,14 @@ with tab3:
             "Importance": importance,
         }).sort_values("Importance", ascending=True)
 
-        bar_colors = [C_BLUE if "Algen" in f or "gemiddelde" in f or "variatie" in f
-                      else C_GREEN if "behandeling" in f
-                      else C_ORANGE if "Tempe" in f
-                      else C_MUTED for f in fi_df["Feature"]]
+        _palette = [
+            "#2980B9", "#27AE60", "#E67E22", "#8E44AD", "#C0392B",
+            "#16A085", "#D35400", "#2C3E50", "#F39C12", "#1ABC9C",
+            "#7F8C8D", "#6C5CE7", "#E84393",
+        ]
+        # assign a fixed color per feature label (sorted order = bottom→top)
+        all_labels = list(fi_df["Feature"])
+        bar_colors = [_palette[all_labels.index(f) % len(_palette)] for f in fi_df["Feature"]]
 
         fig_fi = go.Figure(go.Bar(
             x=fi_df["Importance"], y=fi_df["Feature"],
