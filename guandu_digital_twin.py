@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
+import requests
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -210,6 +211,55 @@ THR = {
 }
 
 
+# ── Weer-API (Open-Meteo — gratis, geen API key) ───────────────────────────────
+@st.cache_data(ttl=3600)
+def fetch_weather_forecast(lat=-22.868, lon=-43.740, days=16):
+    """
+    Haalt echte weersvoorspelling op voor de Guandu-locatie.
+    Geeft DataFrame terug met datum, temperatuur, neerslag en zonnestraling.
+    Valt terug op seizoensgemiddelden als API niet bereikbaar is.
+    """
+    try:
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude":  lat,
+            "longitude": lon,
+            "daily": [
+                "temperature_2m_max", "temperature_2m_min",
+                "precipitation_sum", "shortwave_radiation_sum",
+                "windspeed_10m_max",
+            ],
+            "timezone":      "America/Sao_Paulo",
+            "forecast_days": min(days, 16),
+        }
+        r = requests.get(url, params=params, timeout=6)
+        if r.status_code == 200:
+            data = r.json()["daily"]
+            df = pd.DataFrame({
+                "date":        pd.to_datetime(data["time"]),
+                "temp":        [(a + b) / 2 for a, b in
+                                zip(data["temperature_2m_max"], data["temperature_2m_min"])],
+                "precip":      data["precipitation_sum"],
+                "solar":       data["shortwave_radiation_sum"],   # MJ/m²/dag
+                "windspeed":   data["windspeed_10m_max"],
+            })
+            return df
+    except Exception:
+        pass
+    return None   # caller valt terug op seizoensschatting
+
+
+def seasonal_solar(doy):
+    """Geschatte zonnestraling (MJ/m²/dag) o.b.v. seizoen — Guandu, Brazilië."""
+    # Hoog in zomer (dec-mrt), lager in winter (jun-aug)
+    return 18.0 + 6.0 * np.sin(2 * np.pi * (doy - 355) / 365)
+
+
+def seasonal_temp(doy, base=26.0):
+    """Geschatte watertemperatuur o.b.v. seizoen."""
+    return base + 3.0 * np.sin(2 * np.pi * (doy - 15) / 365)
+
+
 # ── Data ───────────────────────────────────────────────────────────────────────
 @st.cache_data
 def generate_history(days=60, seed=42):
@@ -237,21 +287,29 @@ def generate_history(days=60, seed=42):
         base_algae   = prof["algae"]
         base_geosmin = prof["geosmin"]
         for i, d in enumerate(dates):
+            doy    = d.timetuple().tm_yday
             season = np.sin(2 * np.pi * i / 365) * 2
             temp   = base_temp + season + np.random.normal(0, 0.6)
             ph     = 7.2 + np.random.normal(0, 0.2)
             o2     = max(2.0, prof["o2"] - (temp - prof["temp"]) * 0.1 + np.random.normal(0, 0.3))
             turb   = prof["turb"] + np.random.normal(0, 1.2)
+            # Zonnestraling (MJ/m²/dag) — seizoensafhankelijk
+            solar  = max(5.0, seasonal_solar(doy) + np.random.normal(0, 2.5))
             # LG Sonic behandeling dempt groei — stroomafwaarts meer effect nodig
             treatment_damp = 0.4 if b["id"] in ["B06","B07","B08"] else 0.2
-            gf     = max(0, (temp - 20) / 12) * max(0, 1 - abs(ph - 7.5) / 2)
-            algae  = max(0, base_algae + gf * 15 * (1 - treatment_damp) + season * 2 + np.random.normal(0, 3))
+            # Monod-kinetiek: groei = f(temp) × f(licht) × f(pH)
+            f_temp  = max(0, (temp - 18) / 14)
+            f_light = solar / (solar + 8.0)          # half-saturatie constante 8 MJ/m²
+            f_ph    = max(0, 1 - abs(ph - 7.5) / 2)
+            gf      = f_temp * f_light * f_ph
+            algae  = max(0, base_algae + gf * 18 * (1 - treatment_damp) + season * 2 + np.random.normal(0, 3))
             geo    = max(0, base_geosmin + algae * 0.4 + np.random.normal(0, 2))
             records.append({
                 "date": d, "buoy_id": b["id"], "buoy_name": b["name"],
                 "lat": b["lat"], "lon": b["lon"],
                 "temp": round(temp, 2), "ph": round(ph, 2),
                 "oxygen": round(o2, 2), "turbidity": round(turb, 2),
+                "solar": round(solar, 1),
                 "algae": round(algae, 1), "geosmin": round(geo, 1),
                 "chlorophyl": round(algae * 0.8 + np.random.normal(0, 2), 1),
             })
@@ -259,7 +317,7 @@ def generate_history(days=60, seed=42):
 
 
 # ── Feature engineering ────────────────────────────────────────────────────────
-FEATURES = ["temp", "ph", "oxygen", "turbidity",
+FEATURES = ["temp", "ph", "oxygen", "turbidity", "solar",
             "day_of_year", "day_of_week",
             "lag_1", "lag_3", "lag_7",
             "rolling_mean_7", "rolling_std_7",
@@ -275,6 +333,8 @@ def add_features(df_b, treatment=0.7):
     d["rolling_mean_7"] = d["algae"].shift(1).rolling(7, min_periods=1).mean()
     d["rolling_std_7"]  = d["algae"].shift(1).rolling(7, min_periods=1).std().fillna(0)
     d["treatment"]      = treatment
+    if "solar" not in d.columns:
+        d["solar"] = d["day_of_year"].apply(seasonal_solar)
     return d.dropna(subset=["lag_7"])
 
 
@@ -329,16 +389,20 @@ def train_xgb_models(df_all, treatment=0.7):
 
 # ── XGBoost iteratieve voorspelling ───────────────────────────────────────────
 def predict_xgb(df_b, models_dict, buoy_id, days=7,
-                dt=0.0, rf=1.0, disch=1.0, treatment=0.7):
+                dt=0.0, rf=1.0, disch=1.0, treatment=0.7,
+                weather_df=None):
     """
     Iteratieve voorspelling: voorspelt dag-voor-dag en gebruikt de
     voorspelde waarde als lag-feature voor de volgende dag.
 
-    Scenario-parameters worden vertaald naar feature-aanpassingen:
-    - dt:    temperatuurstijging → temp += dt
-    - rf:    regenval-factor    → turbiditeit × (1/rf), verdunning
-    - disch: lozingsfactor      → voedingsstoffen → rolling mean omhoog
-    - treatment: LG Sonic       → expliciete feature in het model
+    Gebruikt echte weersverwachting (Open-Meteo) als beschikbaar,
+    anders seizoensgemiddelden.
+
+    Scenario-parameters:
+    - dt:       temperatuurstijging bovenop weerverwachting
+    - rf:       regenval-factor (1.0 = normaal)
+    - disch:    industriële lozingsfactor
+    - treatment: LG Sonic ultrasonore behandeling (0–1)
     """
     model, hist = models_dict[buoy_id]
     last   = hist.iloc[-1].copy()
@@ -350,6 +414,12 @@ def predict_xgb(df_b, models_dict, buoy_id, days=7,
     base_o2      = last["oxygen"]
     base_turb    = last["turbidity"]
 
+    # Indexeer weerverwachting op datum voor snelle lookup
+    weather_idx = {}
+    if weather_df is not None:
+        for _, wr in weather_df.iterrows():
+            weather_idx[wr["date"].date()] = wr
+
     preds = []
     now   = datetime.now()
 
@@ -357,14 +427,28 @@ def predict_xgb(df_b, models_dict, buoy_id, days=7,
 
     for i in range(1, days + 1):
         future_date = now + timedelta(days=i)
+        doy = future_date.timetuple().tm_yday
+        dow = future_date.weekday()
+
+        # Weerdata: gebruik echte forecast als beschikbaar, anders seizoensschatting
+        wr = weather_idx.get(future_date.date())
+        if wr is not None:
+            temp_weather  = float(wr["temp"])
+            precip        = float(wr["precip"])        # mm/dag
+            solar         = float(wr["solar"])         # MJ/m²/dag
+            # Regenval-factor van echte neerslag (>5mm = significante regen)
+            rf_actual     = max(0.5, 1.0 + (precip - 2.0) * 0.15) * rf
+        else:
+            temp_weather  = seasonal_temp(doy, base_temp)
+            solar         = seasonal_solar(doy) + np.random.normal(0, 1.5)
+            rf_actual     = rf
 
         # Scenario-aanpassingen op features
-        temp    = base_temp + dt + np.random.normal(0, 0.2)
-        turb    = base_turb * (1.2 / rf) * np.random.uniform(0.9, 1.1)
-        o2      = max(1.5, base_o2 - dt * 0.08 + np.random.normal(0, 0.2))
-        ph      = base_ph + np.random.normal(0, 0.05)
-        doy     = future_date.timetuple().tm_yday
-        dow     = future_date.weekday()
+        temp    = temp_weather + dt + np.random.normal(0, 0.15)
+        solar   = max(3.0, solar + np.random.normal(0, 1.0))
+        turb    = base_turb * (1.2 / rf_actual) * np.random.uniform(0.92, 1.08)
+        o2      = max(1.5, base_o2 - dt * 0.08 + np.random.normal(0, 0.15))
+        ph      = base_ph + np.random.normal(0, 0.04)
 
         lag1 = algae_window[-1]
         lag3 = algae_window[-3] if len(algae_window) >= 3 else algae_window[0]
@@ -372,7 +456,7 @@ def predict_xgb(df_b, models_dict, buoy_id, days=7,
         rm7  = np.mean(algae_window[-7:]) * disch
         rs7  = np.std(algae_window[-7:]) if len(algae_window) >= 2 else 0.0
 
-        row = pd.DataFrame([[temp, ph, o2, turb, doy, dow,
+        row = pd.DataFrame([[temp, ph, o2, turb, solar, doy, dow,
                               lag1, lag3, lag7, rm7, rs7, treatment]],
                            columns=FEATURES)
 
@@ -380,38 +464,100 @@ def predict_xgb(df_b, models_dict, buoy_id, days=7,
         # XGBoost levert de basistrend (leert historische patronen)
         xgb_pred = float(model.predict(row)[0])
 
-        # Logistisch groeimodel berekent scenario-effecten
+        # Bepaal dominant algentype op basis van omstandigheden
+        alg_name, alg_scores = dominant_algae_type(temp, solar, ph)
+        alg = ALGAE_TYPES[alg_name]
+
+        # Monod-kinetiek met type-specifieke parameters
         N = algae_window[-1]
 
-        # Regenval heeft drie effecten:
-        # 1. Nutriëntentoevoer via runoff (rf > 1 = meer voedingsstoffen, stimuleert groei)
-        # 2. Verdunning van bestaande algen (rf > 1 = meer water = lagere concentratie)
-        # 3. Droogte (rf < 1 = minder water = hogere concentratie + warmer water)
-        nutrient_factor  = 1.0 + (rf - 1.0) * 0.5   # meer regen → meer nutriënten
-        dilution_factor  = 1.0 / rf                   # meer regen → verdunning
+        f_temp  = np.exp(-0.5 * ((temp - alg["temp_opt"]) / 4.0) ** 2)
+        f_light = solar / (solar + alg["light_sat"])
+        f_ph    = np.exp(-0.5 * ((ph   - alg["ph_opt"])   / 0.8) ** 2)
 
-        r_raw = max(0, (temp - 18) / 20) * nutrient_factor * disch
-        r_eff = r_raw * (1 - treatment * 0.85)
-        logistic_delta = r_eff * N * (1 - N / K)
+        # Regenval: nutriëntentoevoer + verdunning
+        nutrient_factor = 1.0 + (rf_actual - 1.0) * 0.5
+        dilution_factor = 1.0 / max(0.3, rf_actual)
 
-        # Verdunning/concentratie toepassen na groei
-        N_after_growth = N + logistic_delta
+        mu    = f_temp * f_light * f_ph * alg["mu_max"] * nutrient_factor * disch
+        r_eff = mu * (1.0 - treatment * 0.85)
+        logistic_delta = r_eff * N * (1.0 - N / K)
+
+        N_after_growth  = N + logistic_delta
         N_rain_adjusted = N_after_growth * dilution_factor
 
-        # Gewogen combinatie: 35% XGBoost (trend), 65% logistisch (scenario + behandeling)
+        # Gewogen combinatie: 35% XGBoost (trend), 65% Monod (scenario + type)
         pred = 0.35 * xgb_pred + 0.65 * N_rain_adjusted
         pred = max(0.0, min(K, pred + np.random.normal(0, 0.8)))
 
-        geo  = max(0.0, pred * 0.5 + np.random.normal(0, 1.5))
+        # Geosmin afhankelijk van algentype
+        geo  = max(0.0, pred * alg["geo_factor"] * 0.4 + np.random.normal(0, 1.2))
         preds.append({
-            "date":      future_date,
-            "algae":     round(pred, 1),
-            "geosmin":   round(geo, 1),
-            "treatment": treatment,
+            "date":       future_date,
+            "algae":      round(pred, 1),
+            "geosmin":    round(geo, 1),
+            "treatment":  treatment,
+            "algae_type": alg_name,
+            "type_color": alg["color"],
         })
         algae_window.append(pred)
 
     return pd.DataFrame(preds)
+
+
+# ── Algensoorten ───────────────────────────────────────────────────────────────
+ALGAE_TYPES = {
+    "Cyanobacteriën": {
+        "temp_opt": 31.0, "temp_range": (24, 40),   # °C
+        "light_sat": 6.0,                             # half-saturatie MJ/m²
+        "ph_opt": 8.0,    "ph_range": (7.0, 9.5),
+        "mu_max": 1.30,                               # max groeisnelheid (relatief)
+        "geo_factor": 1.80,                           # geosminproductie multiplier
+        "color": "#C0392B",
+        "nl": "Cyanobacteriën",
+        "desc": "Blauwalg — produceert geosmin & toxines. Hoofdoorzaak Guandu-crisis 2020.",
+    },
+    "Groenwieren": {
+        "temp_opt": 24.0, "temp_range": (15, 32),
+        "light_sat": 10.0,
+        "ph_opt": 7.2,    "ph_range": (6.0, 8.5),
+        "mu_max": 0.90,
+        "geo_factor": 0.40,
+        "color": "#27AE60",
+        "nl": "Groenwieren",
+        "desc": "Chlorophyta — minder schadelijk, laag geosmingehalte.",
+    },
+    "Diatomeeën": {
+        "temp_opt": 18.0, "temp_range": (8, 25),
+        "light_sat": 8.0,
+        "ph_opt": 7.0,    "ph_range": (6.0, 8.0),
+        "mu_max": 0.60,
+        "geo_factor": 0.15,
+        "color": "#0099CC",
+        "nl": "Diatomeeën",
+        "desc": "Kiezelwieren — weinig schadelijk, indicator voor koeler schoon water.",
+    },
+}
+
+
+def dominant_algae_type(temp, solar, ph):
+    """
+    Bepaalt het dominante algentype op basis van omgevingscondities.
+    Berekent geschiktheid per type en retourneert het best passende type.
+    """
+    scores = {}
+    for name, p in ALGAE_TYPES.items():
+        t_lo, t_hi = p["temp_range"]
+        p_lo, p_hi = p["ph_range"]
+        # Temperatuurgeschiktheid (Gaussiaans rond optimum)
+        f_temp  = np.exp(-0.5 * ((temp  - p["temp_opt"]) / 4.0) ** 2)
+        f_light = solar / (solar + p["light_sat"])
+        f_ph    = np.exp(-0.5 * ((ph    - p["ph_opt"])   / 0.8) ** 2)
+        # Straf als buiten bereik
+        if not (t_lo <= temp <= t_hi): f_temp *= 0.1
+        if not (p_lo <= ph   <= p_hi): f_ph   *= 0.1
+        scores[name] = f_temp * f_light * f_ph * p["mu_max"]
+    return max(scores, key=scores.get), scores
 
 
 def status(val, param):
@@ -445,6 +591,9 @@ now_str = datetime.now().strftime("%d %b %Y, %H:%M")
 
 with st.spinner("XGBoost modellen trainen op historische data..."):
     xgb_models, xgb_metrics = train_xgb_models(df)
+
+# Echte weerverwachting ophalen (gecached 1 uur)
+weather_fc = fetch_weather_forecast(days=16)
 
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
@@ -899,9 +1048,11 @@ with tab3:
 
     df_b         = df[df["buoy_id"] == selected_buoy].copy()
     df_pred      = predict_xgb(df_b, xgb_models, selected_buoy,
-                               forecast_days, temp_offset, rain_factor, discharge, treatment)
+                               forecast_days, temp_offset, rain_factor, discharge, treatment,
+                               weather_df=weather_fc)
     df_no_treat  = predict_xgb(df_b, xgb_models, selected_buoy,
-                               forecast_days, temp_offset, rain_factor, discharge, treatment=0.0)
+                               forecast_days, temp_offset, rain_factor, discharge, treatment=0.0,
+                               weather_df=weather_fc)
     hist14       = df_b.tail(14)
 
     # Verbindingspunt: laatste historische waarde als ankerpunt voor voorspellingen
@@ -970,11 +1121,11 @@ with tab3:
         importance = model_obj.feature_importances_
         feat_labels = {
             "temp": "Temperatuur", "ph": "pH", "oxygen": "O₂",
-            "turbidity": "Troebelheid", "day_of_year": "Dag v.h. jaar",
-            "day_of_week": "Dag v.d. week", "lag_1": "Algen gisteren",
-            "lag_3": "Algen 3 dagen terug", "lag_7": "Algen 7 dagen terug",
-            "rolling_mean_7": "7-daags gemiddelde", "rolling_std_7": "7-daagse variatie",
-            "treatment": "LG Sonic behandeling",
+            "turbidity": "Troebelheid", "solar": "Zonnestraling",
+            "day_of_year": "Dag v.h. jaar", "day_of_week": "Dag v.d. week",
+            "lag_1": "Algen gisteren", "lag_3": "Algen 3 dagen terug",
+            "lag_7": "Algen 7 dagen terug", "rolling_mean_7": "7-daags gemiddelde",
+            "rolling_std_7": "7-daagse variatie", "treatment": "LG Sonic behandeling",
         }
         fi_df = pd.DataFrame({
             "Feature":    [feat_labels[f] for f in FEATURES],
@@ -1082,6 +1233,77 @@ with tab3:
     </div>
     """, unsafe_allow_html=True)
 
+    # ── Algensoort analyse ─────────────────────────────────────────────────────
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<p class="section-label">Algensoort analyse — dominant type per dag</p>',
+                unsafe_allow_html=True)
+
+    # Dominante type per dag uit voorspelling
+    type_counts = df_pred["algae_type"].value_counts()
+    dominant    = type_counts.index[0]
+    alg_info    = ALGAE_TYPES[dominant]
+
+    col_type, col_chart = st.columns([1, 2], gap="medium")
+
+    with col_type:
+        # Info card dominant type
+        st.markdown(f"""
+        <div style="background:{C_WHITE}; border:2px solid {alg_info['color']}33;
+                    border-radius:10px; padding:18px 20px;">
+          <div style="font-size:10px; font-weight:700; color:{C_MUTED};
+                      text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">
+            Dominant algentype
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <div style="width:14px; height:14px; border-radius:50%;
+                        background:{alg_info['color']}; flex-shrink:0;"></div>
+            <div style="font-size:17px; font-weight:700; color:{C_DARK};">
+              {alg_info['nl']}
+            </div>
+          </div>
+          <div style="font-size:11px; color:{C_TEXT}; line-height:1.7; margin-bottom:14px;">
+            {alg_info['desc']}
+          </div>
+          <hr style="border-color:{C_BORDER}; margin:10px 0;">
+          <div style="font-size:11px; color:{C_MUTED}; line-height:2.0;">
+            <div>Temp. optimum: <b style="color:{C_DARK};">{alg_info['temp_opt']}°C</b></div>
+            <div>pH optimum: <b style="color:{C_DARK};">{alg_info['ph_opt']}</b></div>
+            <div>Geosmin risico:
+              <b style="color:{'#C0392B' if alg_info['geo_factor']>1 else '#F39C12' if alg_info['geo_factor']>0.3 else '#27AE60'};">
+                {'Hoog' if alg_info['geo_factor']>1 else 'Matig' if alg_info['geo_factor']>0.3 else 'Laag'}
+              </b>
+            </div>
+            <div>Aandeel voorspelling:
+              <b style="color:{C_DARK};">{type_counts[dominant]} / {len(df_pred)} dagen</b>
+            </div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_chart:
+        # Staafgrafiek: groei per type per dag
+        type_colors_map = {t: ALGAE_TYPES[t]["color"] for t in ALGAE_TYPES}
+
+        fig_type = go.Figure()
+        for alg_t, alg_p in ALGAE_TYPES.items():
+            mask = df_pred["algae_type"] == alg_t
+            fig_type.add_trace(go.Bar(
+                x=df_pred.loc[mask, "date"],
+                y=df_pred.loc[mask, "algae"],
+                name=alg_p["nl"],
+                marker_color=alg_p["color"],
+                hovertemplate=f"<b>{alg_p['nl']}</b><br>%{{y:.1f}} μg/L<extra></extra>",
+            ))
+
+        fig_type.add_hline(y=40, line_dash="dot", line_color=C_YELLOW,
+                           annotation_text="Waarschuwing (40)", annotation_font_size=10)
+        fig_type.add_hline(y=70, line_dash="dot", line_color=C_RED,
+                           annotation_text="Alarm (70)", annotation_font_size=10)
+        style(fig_type, height=280, title="<b>Algenconcentratie per soort</b>")
+        fig_type.update_layout(barmode="stack")
+        fig_type.update_yaxes(title="μg/L")
+        st.plotly_chart(fig_type, use_container_width=True)
+
 
 # ────────────────────────────────────────────────────────────────────────────────
 # TAB 4 — SCENARIO-SIMULATOR
@@ -1091,8 +1313,8 @@ with tab4:
                 unsafe_allow_html=True)
 
     df_b     = df[df["buoy_id"] == selected_buoy]
-    baseline = predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 0,           1.0,        1.0,      treatment)
-    scenario = predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, temp_offset, rain_factor, discharge, treatment)
+    baseline = predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 0,           1.0,        1.0,      treatment,    weather_df=weather_fc)
+    scenario = predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, temp_offset, rain_factor, discharge, treatment,    weather_df=weather_fc)
 
     fig_s = go.Figure()
     fig_s.add_trace(go.Scatter(
@@ -1132,8 +1354,8 @@ with tab4:
     res = []
     for b in BUOYS:
         db_  = df[df["buoy_id"] == b["id"]]
-        base = predict_xgb(db_, xgb_models, b["id"], forecast_days, 0,           1.0,        1.0,      treatment)["algae"].max()
-        scen = predict_xgb(db_, xgb_models, b["id"], forecast_days, temp_offset, rain_factor, discharge, treatment)["algae"].max()
+        base = predict_xgb(db_, xgb_models, b["id"], forecast_days, 0,           1.0,        1.0,      treatment,    weather_df=weather_fc)["algae"].max()
+        scen = predict_xgb(db_, xgb_models, b["id"], forecast_days, temp_offset, rain_factor, discharge, treatment,    weather_df=weather_fc)["algae"].max()
         res.append({"Buoy": b["id"], "Naam": b["name"],
                     "Baseline": round(base, 1), "Scenario": round(scen, 1), "Δ": round(scen - base, 1)})
 
