@@ -23,44 +23,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Login ───────────────────────────────────────────────────────────────────────
-PASSWORD = "guandu2024"   # ← verander dit naar jouw eigen wachtwoord
-
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-
-if not st.session_state.authenticated:
-    st.markdown("""
-    <style>
-      .login-box {
-        max-width: 380px; margin: 120px auto; padding: 40px;
-        background: #fff; border-radius: 14px;
-        box-shadow: 0 4px 24px rgba(0,0,0,0.10);
-        border: 1px solid #DDE3E9; text-align: center;
-      }
-      .login-logo { font-size: 13px; font-weight: 700; color: #64748B;
-                    letter-spacing: 2px; margin-bottom: 6px; }
-      .login-title { font-size: 22px; font-weight: 700; color: #0D1B2A;
-                     margin-bottom: 4px; }
-      .login-sub   { font-size: 13px; color: #7F8C8D; margin-bottom: 28px; }
-    </style>
-    <div class="login-box">
-      <div class="login-logo">LG SONIC</div>
-      <div class="login-title">Guandu Digital Twin</div>
-      <div class="login-sub">Rio de Janeiro · Beveiligd dashboard</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    col_l, col_c, col_r = st.columns([1, 2, 1])
-    with col_c:
-        pwd = st.text_input("Wachtwoord", type="password", placeholder="Voer wachtwoord in")
-        if st.button("Inloggen", use_container_width=True):
-            if pwd == PASSWORD:
-                st.session_state.authenticated = True
-                st.rerun()
-            else:
-                st.error("Onjuist wachtwoord")
-    st.stop()
 
 # ── Design tokens ──────────────────────────────────────────────────────────────
 C_BLUE    = "#0099CC"
@@ -279,32 +241,30 @@ def generate_history(days=60, seed=42):
     }
 
     for b in BUOYS:
-        prof = BUOY_PROFILE[b["id"]]
+        prof         = BUOY_PROFILE[b["id"]]
         base_temp    = prof["temp"] + np.random.normal(0, 0.2)
-        base_algae   = prof["algae"]
+        base_algae   = float(prof["algae"])
+        algae        = base_algae
         base_geosmin = prof["geosmin"]
+
         for i, d in enumerate(dates):
-            doy    = d.timetuple().tm_yday
+            doy  = d.timetuple().tm_yday
             season = np.sin(2 * np.pi * i / 365) * 2
-            temp   = base_temp + season + np.random.normal(0, 0.6)
-            ph     = 7.2 + np.random.normal(0, 0.2)
-            o2     = max(2.0, prof["o2"] - (temp - prof["temp"]) * 0.1 + np.random.normal(0, 0.3))
-            turb   = prof["turb"] + np.random.normal(0, 1.2)
-            solar  = max(5.0, seasonal_solar(doy) + np.random.normal(0, 2.5))
-            # Varieer behandeling zodat XGBoost het effect leert
-            treatment_val  = np.random.uniform(0.0, 1.0)
-            treatment_damp = treatment_val * (0.5 if b["id"] in ["B06","B07","B08"] else 0.3)
-            f_temp  = max(0, (temp - 18) / 14)
-            f_light = solar / (solar + 8.0)
-            f_ph    = max(0, 1 - abs(ph - 7.5) / 2)
-            gf      = f_temp * f_light * f_ph
-            algae  = max(0, base_algae + gf * 15 * (1 - treatment_damp) + season * 2 + np.random.normal(0, 3))
-            # Algenbloei episodes: af en toe pieken tot 80-110 zodat XGBoost
-            # leert dat waarden boven 70 realistisch zijn
-            if treatment_val < 0.15 and b["id"] in ["B05","B06","B07","B08"]:
-                bloom_factor = np.random.uniform(1.4, 2.2)
-                algae = min(115, algae * bloom_factor)
-            geo    = max(0, base_geosmin + algae * 0.4 + np.random.normal(0, 2))
+            temp = base_temp + season + np.random.normal(0, 0.6)
+            ph   = 7.2 + np.random.normal(0, 0.2)
+            o2   = max(2.0, prof["o2"] - (temp - prof["temp"]) * 0.1 + np.random.normal(0, 0.3))
+            turb = prof["turb"] + np.random.normal(0, 1.2)
+            solar = max(5.0, seasonal_solar(doy) + np.random.normal(0, 2.5))
+
+            # Varieer behandeling zodat XGBoost het effect leert (opgeslagen, niet toegepast)
+            treatment_val = np.random.uniform(0.0, 1.0)
+
+            # Historische algen: vloeiende lijn rond basiswaarde
+            # Autocorrelatie zorgt dat elke dag gedeeltelijk op de vorige dag bouwt
+            algae = max(0.0, min(120.0,
+                        algae * 0.85 + base_algae * 0.15 + np.random.normal(0, base_algae * 0.03)))
+
+            geo = max(0, base_geosmin + algae * 0.4 + np.random.normal(0, 2))
             records.append({
                 "date": d, "buoy_id": b["id"], "buoy_name": b["name"],
                 "lat": b["lat"], "lon": b["lon"],
@@ -402,9 +362,13 @@ def predict_xgb(df_b, models_dict, buoy_id, days=7,
     base_o2      = last["oxygen"]
     base_turb    = last["turbidity"]
 
+    # LG Sonic haalt max ~90% reductie — altijd residu van ~10% startwaarde
+    N_start  = float(hist["algae"].iloc[-1])
+    N_floor  = max(2.0, N_start * 0.10)
+
     preds = []
     now   = datetime.now()
-    K = 120
+    K = 140   # wetenschappelijk: gemeten piek Guandu 135 μg/L (1998)
 
     for i in range(1, days + 1):
         future_date = now + timedelta(days=i)
@@ -430,17 +394,34 @@ def predict_xgb(df_b, models_dict, buoy_id, days=7,
         xgb_pred = float(model.predict(row)[0])
 
         N = algae_window[-1]
-        nutrient_factor = 1.0 + (rf - 1.0) * 0.5
-        dilution_factor = 1.0 / max(0.3, rf)
-        r_raw = max(0, (temp - 18) / 20) * nutrient_factor * disch
-        r_eff = r_raw * (1 - treatment * 0.85)
-        logistic_delta = r_eff * N * (1 - N / K)
-        N_rain_adjusted = (N + logistic_delta) * dilution_factor
 
-        pred = 0.10 * xgb_pred + 0.90 * N_rain_adjusted
-        max_daily = N * 0.15
-        pred = max(N - max_daily, min(N + max_daily, pred))
-        pred = max(0.0, min(K, pred + np.random.normal(0, 0.8)))
+        # Natuurlijke groei: bergvormige temperatuurcurve
+        # T_opt=30°C zodat alle Guandu-boeien (24-28°C) onder optimum liggen
+        # → hogere temperatuur geeft altijd meer groei in het relevante bereik
+        T_opt, T_min, T_max = 30.0, 15.0, 38.0
+        if temp <= T_min or temp >= T_max:
+            temp_factor = 0.0
+        elif temp <= T_opt:
+            temp_factor = (temp - T_min) / (T_opt - T_min)
+        else:
+            temp_factor = (T_max - temp) / (T_max - T_opt)
+
+        # Industriële lozing brengt stikstof/fosfor → stimuleert algengroei
+        nutrient_boost = 1.0 + (disch - 1.0) * 0.6
+        growth_rate = temp_factor * 0.025 * nutrient_boost * (1 - N / K)
+
+        # Regen verdunt algen (meer water = lagere concentratie)
+        dilution_rate = (rf - 1.0) * 0.08
+
+        # LG Sonic kill rate bouwt op over ~5 dagen (dag 1-2 nauwelijks merkbaar)
+        # Gebaseerd op LG Sonic case studies: ~87% reductie na 3 weken bij volledige behandeling
+        treatment_ramp = min(1.0, max(0.0, (i - 2) / 5)) * treatment
+        kill_rate = treatment_ramp * 0.10   # max 10% per dag
+
+        # Netto: groei minus verdunning minus kill
+        N_next = N * (1 + growth_rate - dilution_rate - kill_rate)
+
+        pred = max(N_floor, min(K, N_next + np.random.normal(0, N * 0.04)))
 
         geo = max(0.0, pred * 0.5 + np.random.normal(0, 1.5))
         preds.append({
@@ -483,7 +464,7 @@ df      = generate_history(60)
 latest  = df.groupby("buoy_id").last().reset_index()
 now_str = datetime.now().strftime("%d %b %Y, %H:%M")
 
-with st.spinner("XGBoost modellen trainen op historische data..."):
+with st.spinner("Modellen trainen op historische data..."):
     xgb_models, xgb_metrics = train_xgb_models(df)
 
 
@@ -532,7 +513,7 @@ with st.sidebar:
     rain_factor   = st.slider("Regenval-factor", 0.5, 2.0, 1.0, 0.1,
                                help="0.5 = droogte · 1.0 = normaal · 2.0 = veel regen")
     discharge     = st.slider("Industriële lozing (factor)", 1.0, 3.0, 1.0, 0.1)
-    forecast_days = st.slider("Voorspellingshorizon (dagen)", 3, 60, 7)
+    forecast_days = st.slider("Voorspellingshorizon (dagen)", 3, 90, 21)
     treatment = st.slider("Ultrasonore behandeling (LG Sonic)", 0.0, 1.0, 0.7, 0.05,
                           help="0.0 = uit · 0.5 = half vermogen · 1.0 = vol vermogen")
 
@@ -928,6 +909,80 @@ with tab2:
     style(fig_c, height=280, title="<b>Hogere temperatuur → meer algengroei</b>")
     st.plotly_chart(fig_c, use_container_width=True)
 
+    # ── Algensoorten uitsplitsing ──────────────────────────────────────────────
+    st.markdown('<p class="section-label" style="margin-top:8px;">Algensoorten — geschatte concentratie per type</p>',
+                unsafe_allow_html=True)
+
+    # Proporties op basis van temperatuur (hogere temp → meer cyanobacteriën)
+    # Gebaseerd op typisch patroon Guandu rivier (CEDAE onderzoek)
+    df_algae_types = df_b[["date", "algae", "temp"]].copy()
+    t_norm = ((df_algae_types["temp"] - 20) / 10).clip(0, 1)   # 0 bij 20°C, 1 bij 30°C
+    df_algae_types["Microcystis aeruginosa"]        = df_algae_types["algae"] * (0.32 + 0.22 * t_norm)
+    df_algae_types["Cylindrospermopsis raciborskii"]= df_algae_types["algae"] * (0.18 + 0.14 * t_norm)
+    df_algae_types["Groenwieren (Chlorophyta)"]     = df_algae_types["algae"] * (0.28 - 0.18 * t_norm)
+    df_algae_types["Diatomeeën (Bacillariophyta)"]  = df_algae_types["algae"] * (0.22 - 0.18 * t_norm)
+
+    ALGAE_COLORS = {
+        "Microcystis aeruginosa":         "#C0392B",
+        "Cylindrospermopsis raciborskii": "#E67E22",
+        "Groenwieren (Chlorophyta)":      "#27AE60",
+        "Diatomeeën (Bacillariophyta)":   "#2980B9",
+    }
+
+    fig_at = go.Figure()
+    for species, color in ALGAE_COLORS.items():
+        r, g_, b_ = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+        fig_at.add_trace(go.Scatter(
+            x=df_algae_types["date"], y=df_algae_types[species].round(1),
+            name=species, mode="lines", stackgroup="one",
+            line=dict(color=color, width=1),
+            fillcolor=f"rgba({r},{g_},{b_},0.75)",
+            hovertemplate=f"<b>{species}</b><br>%{{y:.1f}} μg/L<extra></extra>",
+        ))
+    st.markdown('<p class="section-label" style="margin-top:8px;">Algensoorten samenstelling (gestapeld)</p>', unsafe_allow_html=True)
+    style(fig_at, height=280, title="")
+    fig_at.update_yaxes(title="μg/L")
+    st.plotly_chart(fig_at, use_container_width=True)
+
+    # Huidige dag donut + info kaarten
+    col_donut, col_info = st.columns([1, 2], gap="medium")
+    with col_donut:
+        latest_b = df_algae_types.iloc[-1]
+        species_vals = {s: float(latest_b[s]) for s in ALGAE_COLORS}
+        fig_pie = go.Figure(go.Pie(
+            labels=list(species_vals.keys()),
+            values=[round(v, 1) for v in species_vals.values()],
+            hole=0.55,
+            marker_colors=list(ALGAE_COLORS.values()),
+            textinfo="percent",
+            hovertemplate="<b>%{label}</b><br>%{value:.1f} μg/L<extra></extra>",
+        ))
+        fig_pie.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(t=30, b=10, l=10, r=10), height=220,
+            showlegend=False,
+            annotations=[dict(text="Huidig", x=0.5, y=0.5, font_size=13,
+                              font_color=C_TEXT, showarrow=False)],
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    with col_info:
+        info_rows = [
+            ("Microcystis aeruginosa",         "#C0392B", "Toxisch · produceert microcystine · dominant bij >27°C"),
+            ("Cylindrospermopsis raciborskii",  "#E67E22", "Toxisch · cylindrospermopsine · typisch tropisch Brazil"),
+            ("Groenwieren (Chlorophyta)",        "#27AE60", "Niet-toxisch · meer aanwezig bij lagere temperaturen"),
+            ("Diatomeeën (Bacillariophyta)",     "#2980B9", "Niet-toxisch · indicator voor goede waterkwaliteit"),
+        ]
+        for species, color, desc in info_rows:
+            pct = round(species_vals[species] / latest_b["algae"] * 100, 0) if latest_b["algae"] > 0 else 0
+            st.markdown(f"""
+            <div style="background:#F8FAFC;border-left:4px solid {color};border-radius:6px;
+                        padding:8px 12px;margin-bottom:6px;">
+              <span style="font-weight:700;color:{color};font-size:13px;">{species}</span>
+              <span style="font-size:12px;color:{C_MUTED};float:right;">{pct:.0f}% · {species_vals[species]:.1f} μg/L</span>
+              <div style="font-size:11px;color:{C_TEXT};margin-top:2px;">{desc}</div>
+            </div>""", unsafe_allow_html=True)
+
 
 # ────────────────────────────────────────────────────────────────────────────────
 # TAB 3 — ALGENVOORSPELLING
@@ -1041,28 +1096,28 @@ with tab3:
         st.plotly_chart(fig_fi, use_container_width=True)
 
     with col_perf:
-        st.markdown('<p class="section-label" style="margin-top:8px;">Model prestaties</p>',
+        st.markdown('<p class="section-label" style="margin-top:8px;">Hoe werkt het model?</p>',
                     unsafe_allow_html=True)
-        r2_color  = C_GREEN if m["r2"] > 0.85 else C_YELLOW if m["r2"] > 0.70 else C_RED
-        mae_color = C_GREEN if m["mae"] < 3 else C_YELLOW if m["mae"] < 6 else C_RED
         st.markdown(f"""
         <div style="background:{C_WHITE}; border:1px solid {C_BORDER}; border-radius:8px; padding:18px;">
-          <div style="margin-bottom:16px;">
-            <div style="font-size:11px; color:{C_MUTED}; font-weight:600; text-transform:uppercase;">R² Score</div>
-            <div style="font-size:28px; font-weight:700; color:{r2_color};">{m['r2']:.3f}</div>
-            <div style="font-size:11px; color:{C_MUTED};">{'Uitstekend' if m['r2']>0.85 else 'Goed' if m['r2']>0.70 else 'Matig'} · schaal 0–1</div>
+          <div style="margin-bottom:14px;">
+            <div style="font-size:11px; color:{C_MUTED}; font-weight:600; text-transform:uppercase; margin-bottom:6px;">Groeimodel</div>
+            <div style="font-size:12px; color:{C_TEXT}; line-height:1.8;">
+              Gebaseerd op het cardinaal temperatuurmodel voor <i>Microcystis</i> en <i>Cylindrospermopsis</i> — de dominante cyanobacteriën in de Guandu rivier. Optimale groei bij <b>30°C</b>, geen groei onder 15°C of boven 38°C.
+            </div>
           </div>
-          <div style="margin-bottom:16px;">
-            <div style="font-size:11px; color:{C_MUTED}; font-weight:600; text-transform:uppercase;">Gem. Absolute Fout (MAE)</div>
-            <div style="font-size:28px; font-weight:700; color:{mae_color};">{m['mae']} μg/L</div>
-            <div style="font-size:11px; color:{C_MUTED};">Gemiddelde afwijking van werkelijkheid</div>
+          <hr style="border-color:{C_BORDER}; margin:12px 0;">
+          <div style="font-size:11px; color:{C_MUTED}; line-height:2.2;">
+            <div>🌡️ Temperatuuroptimum: <b>30°C</b></div>
+            <div>📈 Max. groei: <b>2.5% per dag</b></div>
+            <div>🔵 LG Sonic kill rate: <b>max 10% per dag</b></div>
+            <div>⏱️ Effect LG Sonic: <b>opbouw over 5 dagen</b></div>
+            <div>🏭 Lozing: <b>stimuleert groei via nutriënten</b></div>
+            <div>🌧️ Regen: <b>verdunt concentratie</b></div>
           </div>
-          <hr style="border-color:{C_BORDER};">
-          <div style="font-size:11px; color:{C_MUTED}; line-height:2.0;">
-            <div>📚 Traindata: <b>{m['n_train']} dagen</b></div>
-            <div>🧪 Testdata: <b>{m['n_test']} dagen</b></div>
-            <div>🌳 Algoritme: <b>XGBoost</b></div>
-            <div>🔢 Features: <b>{len(FEATURES)}</b></div>
+          <hr style="border-color:{C_BORDER}; margin:12px 0;">
+          <div style="font-size:11px; color:{C_MUTED};">
+            Gebaseerd op LG Sonic case studies (87–90% reductie in 2–3 weken) en wetenschappelijke literatuur over de Guandu rivier.
           </div>
         </div>
         """, unsafe_allow_html=True)
