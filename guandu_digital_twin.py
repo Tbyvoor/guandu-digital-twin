@@ -1055,73 +1055,6 @@ with tab3:
     st.markdown("**Algenconcentratie — met en zonder ultrasonore behandeling**")
     st.plotly_chart(fig_f, use_container_width=True)
 
-    # ── Model info ────────────────────────────────────────────────────────────
-    m = xgb_metrics[selected_buoy]
-    col_fi, col_perf = st.columns([2, 1], gap="medium")
-
-    with col_fi:
-        st.markdown('<p class="section-label" style="margin-top:8px;">Feature importance — wat drijft de voorspelling?</p>',
-                    unsafe_allow_html=True)
-        model_obj = xgb_models[selected_buoy][0]
-        importance = model_obj.feature_importances_
-        feat_labels = {
-            "temp": "Temperatuur", "ph": "pH", "oxygen": "O₂",
-            "turbidity": "Troebelheid", "solar": "Zonnestraling",
-            "day_of_year": "Dag v.h. jaar", "day_of_week": "Dag v.d. week",
-            "lag_1": "Algen gisteren", "lag_3": "Algen 3 dagen terug",
-            "lag_7": "Algen 7 dagen terug", "rolling_mean_7": "7-daags gemiddelde",
-            "rolling_std_7": "7-daagse variatie", "treatment": "LG Sonic behandeling",
-        }
-        fi_df = pd.DataFrame({
-            "Feature":    [feat_labels[f] for f in FEATURES],
-            "Importance": importance,
-        }).sort_values("Importance", ascending=True)
-
-        _palette = [
-            "#2980B9", "#27AE60", "#E67E22", "#8E44AD", "#C0392B",
-            "#16A085", "#D35400", "#2C3E50", "#F39C12", "#1ABC9C",
-            "#7F8C8D", "#6C5CE7", "#E84393",
-        ]
-        # assign a fixed color per feature label (sorted order = bottom→top)
-        all_labels = list(fi_df["Feature"])
-        bar_colors = [_palette[all_labels.index(f) % len(_palette)] for f in fi_df["Feature"]]
-
-        fig_fi = go.Figure(go.Bar(
-            x=fi_df["Importance"], y=fi_df["Feature"],
-            orientation="h", marker_color=bar_colors,
-            hovertemplate="%{y}: %{x:.3f}<extra></extra>",
-        ))
-        style(fig_fi, height=320, title="<b>Welke variabele heeft het meeste invloed?</b>", margin_l=140)
-        fig_fi.update_xaxes(title="Relatief belang", showgrid=True, gridcolor="#EEF2F6")
-        st.plotly_chart(fig_fi, use_container_width=True)
-
-    with col_perf:
-        st.markdown('<p class="section-label" style="margin-top:8px;">Hoe werkt het model?</p>',
-                    unsafe_allow_html=True)
-        st.markdown(f"""
-        <div style="background:{C_WHITE}; border:1px solid {C_BORDER}; border-radius:8px; padding:18px;">
-          <div style="margin-bottom:14px;">
-            <div style="font-size:11px; color:{C_MUTED}; font-weight:600; text-transform:uppercase; margin-bottom:6px;">Groeimodel</div>
-            <div style="font-size:12px; color:{C_TEXT}; line-height:1.8;">
-              Gebaseerd op het cardinaal temperatuurmodel voor <i>Microcystis</i> en <i>Cylindrospermopsis</i> — de dominante cyanobacteriën in de Guandu rivier. Optimale groei bij <b>30°C</b>, geen groei onder 15°C of boven 38°C.
-            </div>
-          </div>
-          <hr style="border-color:{C_BORDER}; margin:12px 0;">
-          <div style="font-size:11px; color:{C_MUTED}; line-height:2.2;">
-            <div>🌡️ Temperatuuroptimum: <b>30°C</b></div>
-            <div>📈 Max. groei: <b>2.5% per dag</b></div>
-            <div>🔵 LG Sonic kill rate: <b>max 10% per dag</b></div>
-            <div>⏱️ Effect LG Sonic: <b>opbouw over 5 dagen</b></div>
-            <div>🏭 Lozing: <b>stimuleert groei via nutriënten</b></div>
-            <div>🌧️ Regen: <b>verdunt concentratie</b></div>
-          </div>
-          <hr style="border-color:{C_BORDER}; margin:12px 0;">
-          <div style="font-size:11px; color:{C_MUTED};">
-            Gebaseerd op LG Sonic case studies (87–90% reductie in 2–3 weken) en wetenschappelijke literatuur over de Guandu rivier.
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
-
     # ── Behandelingseffect samenvatting ───────────────────────────────────────
     besparing = df_no_treat["algae"].max() - df_pred["algae"].max()
     pct = (besparing / max(df_no_treat["algae"].max(), 0.1)) * 100
@@ -1162,6 +1095,81 @@ with tab3:
     fig_g.update_layout(showlegend=False)
     fig_g.update_yaxes(title="ng/L")
     st.plotly_chart(fig_g, use_container_width=True)
+
+    # ── Sensitiviteitsanalyse fysisch model ───────────────────────────────────
+    st.markdown('<p class="section-label" style="margin-top:8px;">Wat drijft de voorspelling?</p>',
+                unsafe_allow_html=True)
+
+    # Bereken piek algen onder verschillende scenario's (alles overig constant)
+    base_pred = predict_xgb(df_b, xgb_models, selected_buoy, forecast_days,
+                            0.0, 1.0, 1.0, 0.0)["algae"].max()
+
+    scenarios = {
+        "LG Sonic behandeling (70%)":  predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 0.0, 1.0, 1.0, 0.70)["algae"].max(),
+        "Temperatuur +3°C":            predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 3.0, 1.0, 1.0, 0.0)["algae"].max(),
+        "Industriële lozing ×2":       predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 0.0, 1.0, 2.0, 0.0)["algae"].max(),
+        "Regenval ×2":                 predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 0.0, 2.0, 1.0, 0.0)["algae"].max(),
+    }
+
+    sens_data = []
+    for label, peak in scenarios.items():
+        delta = peak - base_pred
+        sens_data.append({"Factor": label, "delta": round(delta, 1)})
+
+    cards = [
+        {
+            "label":   "LG Sonic behandeling (70%)",
+            "peak":    scenarios["LG Sonic behandeling (70%)"],
+            "delta":   round(scenarios["LG Sonic behandeling (70%)"] - base_pred, 1),
+            "icon":    "↓",
+            "uitleg":  "Ultrasoon verstoort algengroei",
+            "positief": True,
+        },
+        {
+            "label":   "Temperatuur +3°C",
+            "peak":    scenarios["Temperatuur +3°C"],
+            "delta":   round(scenarios["Temperatuur +3°C"] - base_pred, 1),
+            "icon":    "↑",
+            "uitleg":  "Warmte stimuleert algengroei",
+            "positief": False,
+        },
+        {
+            "label":   "Industriële lozing ×2",
+            "peak":    scenarios["Industriële lozing ×2"],
+            "delta":   round(scenarios["Industriële lozing ×2"] - base_pred, 1),
+            "icon":    "↑",
+            "uitleg":  "Meer nutriënten in het water",
+            "positief": False,
+        },
+        {
+            "label":   "Regenval ×2",
+            "peak":    scenarios["Regenval ×2"],
+            "delta":   round(scenarios["Regenval ×2"] - base_pred, 1),
+            "icon":    "↓",
+            "uitleg":  "Regen verdunt de concentratie",
+            "positief": True,
+        },
+    ]
+
+    cols = st.columns(4, gap="small")
+    for col, card in zip(cols, cards):
+        bg    = "#F0FDF4" if card["positief"] else "#FEF2F2"
+        color = C_GREEN   if card["positief"] else C_RED
+        sign  = "" if card["delta"] < 0 else "+"
+        col.markdown(f"""
+        <div style="background:{bg}; border:1px solid {color}33; border-radius:10px;
+                    padding:14px 12px; text-align:center;">
+          <div style="font-size:11px; font-weight:700; color:{C_MUTED};
+                      text-transform:uppercase; margin-bottom:6px;">{card['label']}</div>
+          <div style="font-size:30px; font-weight:800; color:{color}; line-height:1.1;">
+            {card['icon']} {abs(card['delta']):.0f}
+            <span style="font-size:13px;">μg/L</span>
+          </div>
+          <div style="font-size:11px; color:{C_TEXT}; margin-top:6px;">{card['uitleg']}</div>
+          <div style="font-size:10px; color:{C_MUTED}; margin-top:4px;">
+            Piek: <b>{card['peak']:.0f} μg/L</b>
+          </div>
+        </div>""", unsafe_allow_html=True)
 
     # Samenvatting
     max_a   = df_pred["algae"].max()
