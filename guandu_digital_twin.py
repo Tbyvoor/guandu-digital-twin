@@ -415,6 +415,12 @@ def predict_xgb(df_b, models_dict, buoy_id, days=21,
     m_base = 0.008  # basale sterfte /dag (lyse + sedimentatie)
     N_floor = max(2.0, N_start * 0.10)  # LG Sonic doodt nooit alles (~10% residu)
 
+    # Deterministisch seed op basis van omgevingsparameters (ZONDER treatment).
+    # Zo hebben de no-treat en behandelde lijn dezelfde omgevingsruis,
+    # en verandert de no-treat lijn NIET als de treatment slider beweegt.
+    seed = hash((buoy_id, days, round(dt, 2), round(rf, 2), round(disch, 2))) % (2 ** 31)
+    rng  = np.random.default_rng(seed)
+
     N        = N_start
     now      = datetime.now()
     temp_map = fetch_temperature_data()
@@ -425,7 +431,7 @@ def predict_xgb(df_b, models_dict, buoy_id, days=21,
         doy = future_date.timetuple().tm_yday
 
         # Live watertemperatuur (Open-Meteo) + gebruikers delta
-        T = get_water_temp(future_date, base_temp, temp_map) + dt + np.random.normal(0, 0.3)
+        T = get_water_temp(future_date, base_temp, temp_map) + dt + rng.normal(0, 0.3)
 
         # Cardinaal temperatuurmodel (Bernard & Rémond 2012)
         if T <= T_min or T >= T_max:
@@ -452,36 +458,32 @@ def predict_xgb(df_b, models_dict, buoy_id, days=21,
         # Regen — first flush effect (Guandu, tropisch agrarisch stroomgebied):
         # Dag 1: nutriëntenpiek door runoff (suikerriet, citrus, riool) → meer groei
         # Dag 2-3: flush neemt af, verdunning begint te domineren
-        # Dag 5+: netto verdunning volledig actief
-        flush_decay    = np.exp(-(i - 1) / 2.0)                # halveert elke 2 dagen
-        rain_flush     = rf * 0.02 * flush_decay * (1 - N / K) # nutriëntenpiek dag 1
-        rain_dilution  = rf * 0.015                             # max ~3%/dag bij rf=2
+        # Dag 5+: netto verdunning volledig actief (max ~20% netto reductie bij rf=2)
+        flush_decay    = np.exp(-(i - 1) / 2.0)                 # halveert elke 2 dagen
+        rain_flush     = rf * 0.015 * flush_decay * (1 - N / K) # nutriëntenpiek dag 1
+        rain_dilution  = rf * 0.010                              # ~1%/dag bij rf=1, max ~2%/dag bij rf=2
         net_rain       = rain_dilution - rain_flush
-        # Max netto effect: ~20% reductie over volledige periode bij rf=2
-        # Dag 1: 0.015 - 0.02 = −0.005 (lichte nutriëntenpiek)
-        # Dag 3: 0.015 − 0.007 ≈ +0.008 (lichte verdunning)
-        # Dag 7+: 0.015 − ~0 = +0.015 (volledige verdunning)
+        # Max netto effect bij rf=2 over 21 dagen ≈ −18% (wetenschappelijk max 20%)
 
         # LG Sonic kill rate — opbouw over 5 dagen
         # Variatie koppelt aan algengroei zonder behandeling:
         # Bij hogere groeisnelheid (bloei) → meer dagelijkse fluctuatie in effectiviteit
         # Biologisch: snellere celdeling = meer variatie in gasblaasjesdichtheid
         net_growth = max(0.0, growth - mortality)           # groei zonder behandeling
-        noise_scale = min(0.22, 0.08 + net_growth * 2.5)   # schaal met groeisnelheid
+        noise_scale = min(0.15, 0.05 + net_growth * 1.5)   # schaal met groeisnelheid
         treatment_ramp = min(1.0, i / 5.0) * treatment
-        daily_eff = np.random.normal(1.0, noise_scale)
-        if np.random.random() < 0.08:                       # 8% kans op verminderde dag
-            daily_eff *= np.random.uniform(0.3, 0.6)
+        daily_eff = rng.normal(1.0, noise_scale)
+        if rng.random() < 0.08:                             # 8% kans op verminderde dag
+            daily_eff *= rng.uniform(0.3, 0.6)
         kill_rate = max(0.0, treatment_ramp * 0.10 * daily_eff)
 
         # Netto populatiedynamiek
         N_next = N * (1 + growth - mortality - net_rain - kill_rate)
-        # Dagelijkse schommeling schaalt met zowel huidige concentratie als groeisnelheid
-        # Geeft een natuurlijk bloei-patroon ook tijdens behandeling
-        daily_noise = N * (0.05 + net_growth * 1.5)
-        N = max(N_floor, min(K, N_next + np.random.normal(0, daily_noise)))
+        # Kleinere dagelijkse schommeling zodat parametereffecten zichtbaar blijven
+        daily_noise = N * (0.03 + net_growth * 0.4)
+        N = max(N_floor, min(K, N_next + rng.normal(0, daily_noise)))
 
-        geo = max(0.0, N * 0.5 + np.random.normal(0, 1.5))
+        geo = max(0.0, N * 0.5 + rng.normal(0, 1.5))
         preds.append({
             "date":      future_date,
             "algae":     round(N, 1),
