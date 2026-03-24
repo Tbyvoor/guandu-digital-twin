@@ -810,7 +810,7 @@ with tab1:
                 marker=dict(size=14, color=color, symbol="circle"),
                 text=[buoy["id"]],
                 textposition="top center",
-                textfont=dict(size=13, color=C_DARK, weight=800),
+                textfont=dict(size=12, color=color),
                 customdata=[buoy["id"]],
                 name=buoy["name"],
                 hovertemplate=(
