@@ -411,10 +411,10 @@ def predict_xgb(df_b, models_dict, buoy_id, days=7,
         # Regen verdunt algen (rf=0 → geen verdunning, rf>0 → verdunning)
         dilution_rate = rf * 0.03   # max 6%/dag bij rf=2 (realistisch: 3-5%/dag)
 
-        # LG Sonic kill rate bouwt op over ~5 dagen
+        # LG Sonic kill rate bouwt op over ~5 dagen (start dag 1)
         # Gebaseerd op LG Sonic case studies: ~87% reductie na 3 weken
         # Kleine dagelijkse schommelingen (±15%) voor realisme
-        treatment_ramp = min(1.0, max(0.0, (i - 2) / 5)) * treatment
+        treatment_ramp = min(1.0, i / 5.0) * treatment
         kill_rate = treatment_ramp * 0.10 * np.random.uniform(0.85, 1.15)
 
         # Netto: stabiel + groei - verdunning - kill
@@ -435,7 +435,7 @@ def predict_xgb(df_b, models_dict, buoy_id, days=7,
 
 
 # ── Wetenschappelijke algengroei voorspelling (geen parameters) ────────────────
-def predict_scientific(df_b, buoy_id, days=90, seed=None):
+def predict_scientific(df_b, buoy_id, days=90):
     """
     Wetenschappelijke 90-daagse algengroei voorspelling op basis van:
     - Logistisch groeimodel (Verhulst)
@@ -444,8 +444,6 @@ def predict_scientific(df_b, buoy_id, days=90, seed=None):
     - Historische variabiliteit als ruis
     Geen gebruikersparameters — puur wetenschappelijk baseline.
     """
-    if seed is not None:
-        np.random.seed(seed)
 
     hist = df_b.sort_values("date").reset_index(drop=True)
     N_start   = float(hist["algae"].iloc[-1])
@@ -598,7 +596,7 @@ with st.sidebar:
     _disc_label = "Geen lozing" if discharge == 0 else ("Lage lozing" if discharge < 1.0 else "Normale lozing" if discharge < 1.8 else "Hoge lozing" if discharge < 2.5 else "Ernstige lozing")
     st.markdown(f'<div style="font-size:11px;color:#64748B;margin-top:-10px;margin-bottom:8px;">↳ {_disc_label} (×{discharge:.1f})</div>', unsafe_allow_html=True)
 
-    forecast_days = st.slider("Voorspellingshorizon (dagen)", 3, 90, 3)
+    forecast_days = st.slider("Voorspellingshorizon (dagen)", 3, 90, 21)
 
     treatment = st.slider("Ultrasonore behandeling (LG Sonic)", 0.0, 1.0, 0.0, 0.05,
                           help="0.0 = uit · 0.5 = half vermogen · 1.0 = vol vermogen")
@@ -1095,7 +1093,7 @@ with tab3:
     </div>
     """, unsafe_allow_html=True)
 
-    df_sci = predict_scientific(df_b, selected_buoy, days=90, seed=42)
+    df_sci = predict_scientific(df_b, selected_buoy, days=90)
     sci_dates = [anchor_date] + df_sci["date"].tolist()
     sci_vals  = [anchor_val]  + df_sci["algae"].tolist()
     sci_upper = [anchor_val] + (df_sci["algae"] * 1.15).tolist()
