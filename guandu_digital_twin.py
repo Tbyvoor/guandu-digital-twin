@@ -617,12 +617,12 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     st.markdown('<p class="section-label" style="color:#475569">Buoy selectie</p>', unsafe_allow_html=True)
+    buoy_ids = [b["id"] for b in BUOYS]
     selected_buoy = st.selectbox(
         "Buoy", label_visibility="collapsed",
-        options=[b["id"] for b in BUOYS],
+        options=buoy_ids,
         format_func=lambda x: f"{x}  —  {next(b['name'] for b in BUOYS if b['id'] == x)}",
-        index=[b["id"] for b in BUOYS].index(st.session_state.selected_buoy),
-        key="buoy_selectbox",
+        index=buoy_ids.index(st.session_state.selected_buoy),
     )
     st.session_state.selected_buoy = selected_buoy
 
