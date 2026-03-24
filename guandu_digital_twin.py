@@ -805,8 +805,7 @@ with tab1:
                 hoverinfo="skip", showlegend=False,
             ))
             # Kern — customdata bevat buoy ID voor click-interactie
-            # Wissel tekstpositie af om overlapping te voorkomen
-            _tpos = "bottom center" if buoy["id"] in ("B05", "B06") else "top center"
+            _tpos = "top center"
             fig_map.add_trace(go.Scattermapbox(
                 lat=[buoy["lat"]], lon=[buoy["lon"]],
                 mode="markers+text",
