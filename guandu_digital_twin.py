@@ -576,6 +576,10 @@ df      = generate_history(60)
 latest  = df.groupby("buoy_id").last().reset_index()
 now_str = datetime.now().strftime("%d %b %Y, %H:%M")
 
+# ── Session state voor klikbare kaart ─────────────────────────────────────────
+if "selected_buoy" not in st.session_state:
+    st.session_state.selected_buoy = "B01"
+
 with st.spinner("Modellen trainen op historische data..."):
     xgb_models, xgb_metrics = train_xgb_models(df)
 
@@ -616,8 +620,11 @@ with st.sidebar:
     selected_buoy = st.selectbox(
         "Buoy", label_visibility="collapsed",
         options=[b["id"] for b in BUOYS],
-        format_func=lambda x: f"{x}  —  {next(b['name'] for b in BUOYS if b['id'] == x)}"
+        format_func=lambda x: f"{x}  —  {next(b['name'] for b in BUOYS if b['id'] == x)}",
+        index=[b["id"] for b in BUOYS].index(st.session_state.selected_buoy),
+        key="buoy_selectbox",
     )
+    st.session_state.selected_buoy = selected_buoy
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown('<p class="section-label" style="color:#475569">Scenario parameters</p>', unsafe_allow_html=True)
@@ -784,15 +791,15 @@ with tab1:
                 marker=dict(size=30, color=f"rgba({r},{g},{b_},0.18)"),
                 hoverinfo="skip", showlegend=False,
             ))
-            # Kern
+            # Kern — customdata bevat buoy ID voor click-interactie
             fig_map.add_trace(go.Scattermapbox(
                 lat=[buoy["lat"]], lon=[buoy["lon"]],
                 mode="markers+text",
-                marker=dict(size=14, color=color,
-                            symbol="circle"),
+                marker=dict(size=14, color=color, symbol="circle"),
                 text=[buoy["id"]],
                 textposition="top center",
                 textfont=dict(size=10, color="#FFFFFF", weight=700),
+                customdata=[buoy["id"]],
                 name=buoy["name"],
                 hovertemplate=(
                     f"<b>{buoy['id']} — {buoy['name']}</b><br>"
@@ -813,9 +820,19 @@ with tab1:
             margin=dict(l=0, r=0, t=0, b=0),
             height=480,
         )
-        st.plotly_chart(fig_map, use_container_width=True)
+        map_event = st.plotly_chart(fig_map, use_container_width=True,
+                                     on_select="rerun", selection_mode="points",
+                                     key="buoy_map")
+        if map_event and map_event.selection and map_event.selection.points:
+            pt = map_event.selection.points[0]
+            cdata = pt.get("customdata")
+            if cdata and cdata in [b["id"] for b in BUOYS]:
+                st.session_state.selected_buoy = cdata
+                st.rerun()
+
         st.markdown(
             f'<span style="font-size:11px;color:{C_MUTED};">'
+            f'<b>Klik op een boei</b> om te selecteren &nbsp;·&nbsp; '
             f'<span style="color:{C_GREEN}">●</span> Normaal  '
             f'<span style="color:{C_YELLOW}">●</span> Verhoogd (>40 μg/L)  '
             f'<span style="color:{C_RED}">●</span> Alarm (>70 μg/L)</span>',
