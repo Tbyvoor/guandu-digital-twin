@@ -827,8 +827,9 @@ with tab1:
             pt = map_event.selection.points[0]
             cdata = pt.get("customdata")
             if cdata and cdata in [b["id"] for b in BUOYS]:
-                st.session_state.selected_buoy = cdata
-                st.rerun()
+                if st.session_state.selected_buoy != cdata:
+                    st.session_state.selected_buoy = cdata
+                    st.rerun()
 
         st.markdown(
             f'<span style="font-size:11px;color:{C_MUTED};">'
