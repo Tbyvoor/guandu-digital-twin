@@ -805,12 +805,14 @@ with tab1:
                 hoverinfo="skip", showlegend=False,
             ))
             # Kern — customdata bevat buoy ID voor click-interactie
+            # Wissel tekstpositie af om overlapping te voorkomen
+            _tpos = "bottom center" if buoy["id"] in ("B05", "B06") else "top center"
             fig_map.add_trace(go.Scattermapbox(
                 lat=[buoy["lat"]], lon=[buoy["lon"]],
                 mode="markers+text",
                 marker=dict(size=14, color=color, symbol="circle"),
                 text=[buoy["id"]],
-                textposition="top center",
+                textposition=_tpos,
                 textfont=dict(size=14, color="#000000"),
                 customdata=[buoy["id"]],
                 name=buoy["name"],
@@ -827,11 +829,11 @@ with tab1:
         fig_map.update_layout(
             mapbox=dict(
                 style="open-street-map",
-                center=dict(lat=-22.851, lon=-43.690),
-                zoom=11,
+                center=dict(lat=-22.858, lon=-43.686),
+                zoom=10,
             ),
             margin=dict(l=0, r=0, t=0, b=0),
-            height=500,
+            height=480,
         )
         map_event = st.plotly_chart(fig_map, use_container_width=True,
                                      on_select="rerun", selection_mode="points",
