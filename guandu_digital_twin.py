@@ -507,12 +507,12 @@ with st.sidebar:
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown('<p class="section-label" style="color:#475569">Scenario parameters</p>', unsafe_allow_html=True)
-    temp_offset   = st.slider("Temperatuurstijging (°C)", 0.0, 5.0, 0.0, 0.5,
-                               help="0 = geen verandering · +5°C = sterke opwarming")
-    rain_factor   = st.slider("Extra regenval", 0.0, 2.0, 0.0, 0.1,
-                               help="0 = geen extra regen · 1.0 = normale hoeveelheid · 2.0 = dubbel")
-    discharge     = st.slider("Lozingsintensiteit", 0.0, 3.0, 0.0, 0.1,
-                               help="0 = geen lozing · 1.0 = normaal niveau · 3.0 = hoge lozing")
+    temp_offset   = st.slider("Temperatuurstijging (°C, gem. over periode)", 0.0, 5.0, 0.0, 0.5,
+                               help="Gemiddelde stijging t.o.v. nu over de hele voorspellingsperiode · 0 = geen verandering · +5°C = sterke opwarming")
+    rain_factor   = st.slider("Regenval (factor, gem. over periode)", 0.0, 2.0, 0.0, 0.1,
+                               help="Gemiddelde regenintensiteit t.o.v. normaal · 0 = geen regen · 1.0 = normaal · 2.0 = dubbel normaal")
+    discharge     = st.slider("Lozingsintensiteit (factor, gem. over periode)", 0.0, 3.0, 0.0, 0.1,
+                               help="Gemiddelde lozingsintensiteit t.o.v. normaal · 0 = geen lozing · 1.0 = normaal · 3.0 = hoge lozing")
     forecast_days = st.slider("Voorspellingshorizon (dagen)", 3, 90, 3)
     treatment = st.slider("Ultrasonore behandeling (LG Sonic)", 0.0, 1.0, 0.0, 0.05,
                           help="0.0 = uit · 0.5 = half vermogen · 1.0 = vol vermogen")
