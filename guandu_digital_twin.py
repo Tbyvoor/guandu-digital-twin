@@ -438,8 +438,10 @@ def predict_xgb(df_b, models_dict, buoy_id, days=21,
         # Lichtfactor — seizoenscyclus Rio (meer licht in zomer)
         f_L = 0.65 + 0.35 * np.sin(2 * np.pi * (doy - 355) / 365)
 
-        # Nutriëntenboost door lozing (disch=0 → geen extra, disch=3 → +50% groei)
-        f_N = 1.0 + (disch / 3.0) * 0.5
+        # Nutriëntenboost door lozing — vertraagd effect (3-5 dagen absorptie)
+        # Nutriënten zijn pas beschikbaar voor algen na opname in het ecosysteem
+        nutrient_ramp = min(1.0, max(0.0, (i - 1) / 4.0))  # volledig na dag 5
+        f_N = 1.0 + nutrient_ramp * (disch / 3.0) * 0.5
 
         # Logistische groei: temperatuur × licht × nutriënten × draagkracht
         growth = r_max * f_T * f_L * f_N * (1 - N / K)
@@ -447,8 +449,11 @@ def predict_xgb(df_b, models_dict, buoy_id, days=21,
         # Seizoensgebonden sterfte (hoger bij suboptimale temperatuur)
         mortality = m_base + 0.012 * (1 - f_T)
 
-        # Verdunning door regen (rf=0 → geen effect, rf=2 → max 6%/dag)
-        dilution = rf * 0.03
+        # Regen: verdunning (positief) maar runoff brengt ook nutriënten mee (negatief)
+        # Netto-effect: ~60% van de verdunning wordt gecompenseerd door nutriënteninput
+        rain_dilution  = rf * 0.03                     # max 6%/dag verdunning
+        rain_nutrients = rf * 0.012 * (1 - N / K)     # runoff-nutriënten (~40% offset)
+        net_rain       = rain_dilution - rain_nutrients
 
         # LG Sonic kill rate — opbouw over 5 dagen
         # Dagelijkse variatie: normaal verdeeld ±12%, zelden verminderde dag
@@ -460,7 +465,7 @@ def predict_xgb(df_b, models_dict, buoy_id, days=21,
         kill_rate = max(0.0, treatment_ramp * 0.10 * daily_eff)
 
         # Netto populatiedynamiek
-        N_next = N * (1 + growth - mortality - dilution - kill_rate)
+        N_next = N * (1 + growth - mortality - net_rain - kill_rate)
         N = max(N_floor, min(K, N_next + np.random.normal(0, N * 0.03)))
 
         geo = max(0.0, N * 0.5 + np.random.normal(0, 1.5))
