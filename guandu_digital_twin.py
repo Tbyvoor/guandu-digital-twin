@@ -453,13 +453,14 @@ def predict_xgb(df_b, models_dict, buoy_id, days=21,
         # Dag 1: nutriëntenpiek door runoff (suikerriet, citrus, riool) → meer groei
         # Dag 2-3: flush neemt af, verdunning begint te domineren
         # Dag 5+: netto verdunning volledig actief
-        flush_decay    = np.exp(-(i - 1) / 2.0)               # halveert elke 2 dagen
-        rain_flush     = rf * 0.04 * flush_decay * (1 - N / K) # nutriëntenpiek dag 1
-        rain_dilution  = rf * 0.03                              # verdunning (constant)
+        flush_decay    = np.exp(-(i - 1) / 2.0)                # halveert elke 2 dagen
+        rain_flush     = rf * 0.02 * flush_decay * (1 - N / K) # nutriëntenpiek dag 1
+        rain_dilution  = rf * 0.015                             # max ~3%/dag bij rf=2
         net_rain       = rain_dilution - rain_flush
-        # Dag 1: 0.03 - 0.04 = −0.01 (netto meer algen)
-        # Dag 3: 0.03 − 0.015 ≈ +0.015 (lichte verdunning)
-        # Dag 7+: 0.03 − ~0 = +0.03 (volledige verdunning)
+        # Max netto effect: ~20% reductie over volledige periode bij rf=2
+        # Dag 1: 0.015 - 0.02 = −0.005 (lichte nutriëntenpiek)
+        # Dag 3: 0.015 − 0.007 ≈ +0.008 (lichte verdunning)
+        # Dag 7+: 0.015 − ~0 = +0.015 (volledige verdunning)
 
         # LG Sonic kill rate — opbouw over 5 dagen
         # Dagelijkse variatie: normaal verdeeld ±12%, zelden verminderde dag
