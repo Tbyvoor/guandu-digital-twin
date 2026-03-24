@@ -509,13 +509,25 @@ with st.sidebar:
     st.markdown('<p class="section-label" style="color:#475569">Scenario parameters</p>', unsafe_allow_html=True)
     temp_offset   = st.slider("Temperatuurstijging (°C, gem. over periode)", 0.0, 5.0, 0.0, 0.5,
                                help="Gemiddelde stijging t.o.v. nu over de hele voorspellingsperiode · 0 = geen verandering · +5°C = sterke opwarming")
+    _temp_label = "Geen effect" if temp_offset == 0 else f"+{temp_offset}°C — {'Licht' if temp_offset < 2 else 'Matig' if temp_offset < 4 else 'Sterk'} verhoogd"
+    st.markdown(f'<div style="font-size:11px;color:#64748B;margin-top:-10px;margin-bottom:8px;">↳ {_temp_label}</div>', unsafe_allow_html=True)
+
     rain_factor   = st.slider("Regenval (factor, gem. over periode)", 0.0, 2.0, 0.0, 0.1,
                                help="Gemiddelde regenintensiteit t.o.v. normaal · 0 = geen regen · 1.0 = normaal · 2.0 = dubbel normaal")
+    _rain_label = "Geen regen" if rain_factor == 0 else ("Lichte regen" if rain_factor < 0.5 else "Normale regen" if rain_factor < 1.2 else "Zware regen" if rain_factor < 1.7 else "Extreme regenval")
+    st.markdown(f'<div style="font-size:11px;color:#64748B;margin-top:-10px;margin-bottom:8px;">↳ {_rain_label} (×{rain_factor:.1f})</div>', unsafe_allow_html=True)
+
     discharge     = st.slider("Lozingsintensiteit (factor, gem. over periode)", 0.0, 3.0, 0.0, 0.1,
                                help="Gemiddelde lozingsintensiteit t.o.v. normaal · 0 = geen lozing · 1.0 = normaal · 3.0 = hoge lozing")
+    _disc_label = "Geen lozing" if discharge == 0 else ("Lage lozing" if discharge < 1.0 else "Normale lozing" if discharge < 1.8 else "Hoge lozing" if discharge < 2.5 else "Ernstige lozing")
+    st.markdown(f'<div style="font-size:11px;color:#64748B;margin-top:-10px;margin-bottom:8px;">↳ {_disc_label} (×{discharge:.1f})</div>', unsafe_allow_html=True)
+
     forecast_days = st.slider("Voorspellingshorizon (dagen)", 3, 90, 3)
+
     treatment = st.slider("Ultrasonore behandeling (LG Sonic)", 0.0, 1.0, 0.0, 0.05,
                           help="0.0 = uit · 0.5 = half vermogen · 1.0 = vol vermogen")
+    _treat_label = "Uit" if treatment == 0 else ("Laag vermogen" if treatment < 0.35 else "Half vermogen" if treatment < 0.7 else "Hoog vermogen" if treatment < 1.0 else "Vol vermogen")
+    st.markdown(f'<div style="font-size:11px;color:#64748B;margin-top:-10px;margin-bottom:8px;">↳ {_treat_label} ({int(treatment*100)}%)</div>', unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown(f"""
