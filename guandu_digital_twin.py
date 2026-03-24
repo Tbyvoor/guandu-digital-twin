@@ -409,7 +409,7 @@ def predict_xgb(df_b, models_dict, buoy_id, days=7,
         growth_rate = temp_growth + nutrient_growth
 
         # Regen verdunt algen (rf=0 → geen verdunning, rf>0 → verdunning)
-        dilution_rate = rf * 0.06   # max 12%/dag bij rf=2
+        dilution_rate = rf * 0.03   # max 6%/dag bij rf=2 (realistisch: 3-5%/dag)
 
         # LG Sonic kill rate bouwt op over ~5 dagen
         # Gebaseerd op LG Sonic case studies: ~87% reductie na 3 weken
