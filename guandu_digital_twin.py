@@ -377,7 +377,7 @@ def predict_xgb(df_b, models_dict, buoy_id, days=7,
 
         temp  = base_temp + dt + np.random.normal(0, 0.2)
         solar = max(3.0, seasonal_solar(doy) + np.random.normal(0, 1.5))
-        turb  = base_turb * (1.2 / rf) * np.random.uniform(0.9, 1.1)
+        turb  = base_turb * (1.2 / max(rf, 0.1)) * np.random.uniform(0.9, 1.1)
         o2    = max(1.5, base_o2 - dt * 0.08 + np.random.normal(0, 0.2))
         ph    = base_ph + np.random.normal(0, 0.05)
 
@@ -395,30 +395,28 @@ def predict_xgb(df_b, models_dict, buoy_id, days=7,
 
         N = algae_window[-1]
 
-        # Natuurlijke groei: bergvormige temperatuurcurve
-        # T_opt=30°C zodat alle Guandu-boeien (24-28°C) onder optimum liggen
-        # → hogere temperatuur geeft altijd meer groei in het relevante bereik
-        T_opt, T_min, T_max = 30.0, 15.0, 38.0
-        if temp <= T_min or temp >= T_max:
-            temp_factor = 0.0
-        elif temp <= T_opt:
-            temp_factor = (temp - T_min) / (T_opt - T_min)
-        else:
-            temp_factor = (T_max - temp) / (T_max - T_opt)
+        # ── Sliders zijn deltas t.o.v. huidige situatie ──────────────────────
+        # Bij alles=0: algen stabiel (geen groei, geen daling)
 
-        # Industriële lozing brengt stikstof/fosfor → stimuleert algengroei
-        nutrient_boost = 1.0 + (disch - 1.0) * 0.6
-        growth_rate = temp_factor * 0.025 * nutrient_boost * (1 - N / K)
+        # Temperatuurstijging (dt=0 → geen groei, dt>0 → meer groei)
+        # Gebaseerd op cardinaal model: optimum 30°C, lineair tussen 0-5°C stijging
+        temp_growth = (dt / 5.0) * 0.025 * (1 - N / K)   # max 2.5%/dag bij +5°C
 
-        # Regen verdunt algen (meer water = lagere concentratie)
-        dilution_rate = (rf - 1.0) * 0.08
+        # Lozing (disch=0 → geen effect, disch>0 → meer nutriënten → meer groei)
+        nutrient_growth = (disch / 3.0) * 0.015 * (1 - N / K)   # max 1.5%/dag bij x3
 
-        # LG Sonic kill rate bouwt op over ~5 dagen (dag 1-2 nauwelijks merkbaar)
-        # Gebaseerd op LG Sonic case studies: ~87% reductie na 3 weken bij volledige behandeling
+        # Totale groeisnelheid
+        growth_rate = temp_growth + nutrient_growth
+
+        # Regen verdunt algen (rf=0 → geen verdunning, rf>0 → verdunning)
+        dilution_rate = rf * 0.06   # max 12%/dag bij rf=2
+
+        # LG Sonic kill rate bouwt op over ~5 dagen
+        # Gebaseerd op LG Sonic case studies: ~87% reductie na 3 weken
         treatment_ramp = min(1.0, max(0.0, (i - 2) / 5)) * treatment
-        kill_rate = treatment_ramp * 0.10   # max 10% per dag
+        kill_rate = treatment_ramp * 0.10   # max 10%/dag
 
-        # Netto: groei minus verdunning minus kill
+        # Netto: stabiel + groei - verdunning - kill
         N_next = N * (1 + growth_rate - dilution_rate - kill_rate)
 
         pred = max(N_floor, min(K, N_next + np.random.normal(0, N * 0.04)))
@@ -509,12 +507,14 @@ with st.sidebar:
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown('<p class="section-label" style="color:#475569">Scenario parameters</p>', unsafe_allow_html=True)
-    temp_offset   = st.slider("Temperatuurstijging (°C)", 0.0, 5.0, 0.0, 0.5)
-    rain_factor   = st.slider("Regenval-factor", 0.5, 2.0, 1.0, 0.1,
-                               help="0.5 = droogte · 1.0 = normaal · 2.0 = veel regen")
-    discharge     = st.slider("Industriële lozing (factor)", 1.0, 3.0, 1.0, 0.1)
-    forecast_days = st.slider("Voorspellingshorizon (dagen)", 3, 90, 21)
-    treatment = st.slider("Ultrasonore behandeling (LG Sonic)", 0.0, 1.0, 0.7, 0.05,
+    temp_offset   = st.slider("Temperatuurstijging (°C)", 0.0, 5.0, 0.0, 0.5,
+                               help="0 = geen verandering · +5°C = sterke opwarming")
+    rain_factor   = st.slider("Extra regenval", 0.0, 2.0, 0.0, 0.1,
+                               help="0 = geen extra regen · 1.0 = normale hoeveelheid · 2.0 = dubbel")
+    discharge     = st.slider("Lozingsintensiteit", 0.0, 3.0, 0.0, 0.1,
+                               help="0 = geen lozing · 1.0 = normaal niveau · 3.0 = hoge lozing")
+    forecast_days = st.slider("Voorspellingshorizon (dagen)", 3, 90, 3)
+    treatment = st.slider("Ultrasonore behandeling (LG Sonic)", 0.0, 1.0, 0.0, 0.05,
                           help="0.0 = uit · 0.5 = half vermogen · 1.0 = vol vermogen")
 
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -994,10 +994,13 @@ with tab3:
         unsafe_allow_html=True)
 
     df_b         = df[df["buoy_id"] == selected_buoy].copy()
-    df_pred      = predict_xgb(df_b, xgb_models, selected_buoy,
-                               forecast_days, temp_offset, rain_factor, discharge, treatment)
     df_no_treat  = predict_xgb(df_b, xgb_models, selected_buoy,
                                forecast_days, temp_offset, rain_factor, discharge, treatment=0.0)
+    if treatment == 0.0:
+        df_pred = df_no_treat.copy()
+    else:
+        df_pred = predict_xgb(df_b, xgb_models, selected_buoy,
+                               forecast_days, temp_offset, rain_factor, discharge, treatment)
     hist14       = df_b.tail(14)
 
     # Verbindingspunt: laatste historische waarde als ankerpunt voor voorspellingen
@@ -1101,14 +1104,15 @@ with tab3:
                 unsafe_allow_html=True)
 
     # Bereken piek algen onder verschillende scenario's (alles overig constant)
+    # Baseline = alles op 0 = stabiele algen (geen groei, geen daling)
     base_pred = predict_xgb(df_b, xgb_models, selected_buoy, forecast_days,
-                            0.0, 1.0, 1.0, 0.0)["algae"].max()
+                            0.0, 0.0, 0.0, 0.0)["algae"].max()
 
     scenarios = {
-        "LG Sonic behandeling (70%)":  predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 0.0, 1.0, 1.0, 0.70)["algae"].max(),
-        "Temperatuur +3°C":            predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 3.0, 1.0, 1.0, 0.0)["algae"].max(),
-        "Industriële lozing ×2":       predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 0.0, 1.0, 2.0, 0.0)["algae"].max(),
-        "Regenval ×2":                 predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 0.0, 2.0, 1.0, 0.0)["algae"].max(),
+        "LG Sonic behandeling (70%)":  predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 0.0, 0.0, 0.0, 0.70)["algae"].max(),
+        "Temperatuur +3°C":            predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 3.0, 0.0, 0.0, 0.0)["algae"].max(),
+        "Industriële lozing ×2":       predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 0.0, 0.0, 2.0, 0.0)["algae"].max(),
+        "Regenval ×2":                 predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 0.0, 2.0, 0.0, 0.0)["algae"].max(),
     }
 
     sens_data = []
@@ -1200,7 +1204,7 @@ with tab4:
                 unsafe_allow_html=True)
 
     df_b     = df[df["buoy_id"] == selected_buoy]
-    baseline = predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 0,           1.0,        1.0,      treatment)
+    baseline = predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, 0,           0.0,        0.0,      treatment)
     scenario = predict_xgb(df_b, xgb_models, selected_buoy, forecast_days, temp_offset, rain_factor, discharge, treatment)
 
     fig_s = go.Figure()
@@ -1241,7 +1245,7 @@ with tab4:
     res = []
     for b in BUOYS:
         db_  = df[df["buoy_id"] == b["id"]]
-        base = predict_xgb(db_, xgb_models, b["id"], forecast_days, 0,           1.0,        1.0,      treatment)["algae"].max()
+        base = predict_xgb(db_, xgb_models, b["id"], forecast_days, 0,           0.0,        0.0,      treatment)["algae"].max()
         scen = predict_xgb(db_, xgb_models, b["id"], forecast_days, temp_offset, rain_factor, discharge, treatment)["algae"].max()
         res.append({"Buoy": b["id"], "Naam": b["name"],
                     "Baseline": round(base, 1), "Scenario": round(scen, 1), "Δ": round(scen - base, 1)})
