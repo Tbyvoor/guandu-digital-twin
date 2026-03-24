@@ -1075,88 +1075,15 @@ with tab2:
 # ────────────────────────────────────────────────────────────────────────────────
 with tab3:
     buoy_name_sel = next(b["name"] for b in BUOYS if b["id"] == selected_buoy)
+    st.markdown(
+        f'<p class="section-label">{selected_buoy} — {buoy_name_sel} · {forecast_days}-daagse voorspelling</p>',
+        unsafe_allow_html=True)
+
     df_b  = df[df["buoy_id"] == selected_buoy].copy()
     hist14 = df_b.tail(14)
     anchor_date = hist14["date"].iloc[-1]
     anchor_val  = hist14["algae"].iloc[-1]
     now_dt = datetime.now()
-
-    # ── Wetenschappelijke 90-daagse baseline voorspelling ─────────────────────
-    st.markdown('<p class="section-label">Wetenschappelijke voorspelling — 90 dagen (logistisch groeimodel)</p>',
-                unsafe_allow_html=True)
-    st.markdown(f"""
-    <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px;
-                padding:10px 16px; font-size:12px; color:{C_TEXT}; margin-bottom:12px;">
-      <b>Model:</b> Logistisch groeimodel · Cardinaal temperatuurmodel (Bernard & Rémond 2012) ·
-      Seizoenscyclus Rio de Janeiro · Draagkracht K = 140 μg/L ·
-      Max groeisnelheid r = 0.15/dag (Microcystis aeruginosa) · Geen gebruikersparameters
-    </div>
-    """, unsafe_allow_html=True)
-
-    df_sci = predict_scientific(df_b, selected_buoy, days=90)
-    sci_dates = [anchor_date] + df_sci["date"].tolist()
-    sci_vals  = [anchor_val]  + df_sci["algae"].tolist()
-    sci_upper = [anchor_val] + (df_sci["algae"] * 1.15).tolist()
-    sci_lower = [anchor_val] + (df_sci["algae"] * 0.85).tolist()
-
-    fig_sci = go.Figure()
-    # Onzekerheidsband
-    fig_sci.add_trace(go.Scatter(
-        x=sci_dates + sci_dates[::-1], y=sci_upper + sci_lower[::-1],
-        fill="toself", fillcolor="rgba(39,174,96,0.08)",
-        line=dict(color="rgba(0,0,0,0)"), name="Onzekerheidsmarge (±15%)", showlegend=True,
-    ))
-    # Historie
-    fig_sci.add_trace(go.Scatter(
-        x=hist14["date"], y=hist14["algae"], mode="lines",
-        name="Historisch (gemeten)", line=dict(color=C_DARK, width=2),
-        hovertemplate="%{y:.1f} μg/L<extra></extra>",
-    ))
-    # Wetenschappelijke voorspelling
-    fig_sci.add_trace(go.Scatter(
-        x=sci_dates, y=sci_vals, mode="lines",
-        name="Wetenschappelijke voorspelling (90 dagen)",
-        line=dict(color=C_GREEN, width=2.5),
-        hovertemplate="Voorspelling: %{y:.1f} μg/L<extra></extra>",
-    ))
-    fig_sci.add_trace(go.Scatter(
-        x=[now_dt, now_dt], y=[0, 145], mode="lines",
-        line=dict(color=C_MUTED, width=1, dash="dot"),
-        name="Nu", showlegend=False,
-    ))
-    fig_sci.add_hline(y=40, line_dash="dot", line_color=C_YELLOW,
-                      annotation_text="Waarschuwing (40)", annotation_font_size=10)
-    fig_sci.add_hline(y=70, line_dash="dot", line_color=C_RED,
-                      annotation_text="Alarm (70)", annotation_font_size=10)
-    style(fig_sci, height=360, title="")
-    fig_sci.update_yaxes(title="μg/L")
-    st.plotly_chart(fig_sci, use_container_width=True)
-
-    # Wetenschappelijke samenvatting
-    sci_peak = df_sci["algae"].max()
-    sci_peak_day = df_sci.loc[df_sci["algae"].idxmax(), "date"].strftime("%d %b")
-    sci_end = df_sci["algae"].iloc[-1]
-    c1, c2, c3 = st.columns(3, gap="medium")
-    c1.metric("Piek verwacht", f"{sci_peak:.1f} μg/L", f"op {sci_peak_day}")
-    c2.metric("Verwacht over 90 dagen", f"{sci_end:.1f} μg/L",
-              f"{sci_end - anchor_val:+.1f} vs nu")
-    c3.metric("Risico", "Hoog" if sci_peak > 70 else "Verhoogd" if sci_peak > 40 else "Laag",
-              "Boven alarmgrens" if sci_peak > 70 else "Boven waarschuwing" if sci_peak > 40 else "Binnen norm")
-
-    st.markdown("<hr>", unsafe_allow_html=True)
-
-    # ── Scenario met parameters ───────────────────────────────────────────────
-    st.markdown(
-        f'<p class="section-label">{selected_buoy} — {buoy_name_sel} · Scenario-voorspelling ({forecast_days} dagen)</p>',
-        unsafe_allow_html=True)
-    st.markdown(f"""
-    <div style="background:#FFF7ED; border:1px solid #FED7AA; border-radius:8px;
-                padding:10px 16px; font-size:12px; color:{C_TEXT}; margin-bottom:12px;">
-      <b>Scenario:</b> Temperatuur +{temp_offset}°C · Regenval ×{rain_factor:.1f} ·
-      Lozing ×{discharge:.1f} · LG Sonic {int(treatment*100)}% ·
-      Parameters stelbaar via de sidebar
-    </div>
-    """, unsafe_allow_html=True)
 
     df_no_treat  = predict_xgb(df_b, xgb_models, selected_buoy,
                                forecast_days, temp_offset, rain_factor, discharge, treatment=0.0)
@@ -1176,7 +1103,7 @@ with tab3:
     # Onbehandeld (grijs) — referentie
     fig_f.add_trace(go.Scatter(
         x=dates_fwd, y=notr_vals, mode="lines",
-        name="Scenario zonder behandeling", line=dict(color="#B0BEC5", width=1.5, dash="dot"),
+        name="Zonder behandeling", line=dict(color="#B0BEC5", width=1.5, dash="dot"),
         hovertemplate="Zonder behandeling: %{y:.1f} μg/L<extra></extra>",
     ))
     # Onzekerheidsband behandeld
@@ -1191,10 +1118,10 @@ with tab3:
         name="Historisch (gemeten)", line=dict(color=C_DARK, width=2),
         hovertemplate="%{y:.1f} μg/L<extra></extra>",
     ))
-    # Scenario met behandeling
+    # Voorspelling met behandeling
     fig_f.add_trace(go.Scatter(
         x=dates_fwd, y=pred_vals, mode="lines+markers",
-        name=f"Scenario met LG Sonic ({int(treatment*100)}%)",
+        name=f"Voorspelling (behandeling {int(treatment*100)}%)",
         line=dict(color=C_BLUE, width=2.5),
         marker=dict(size=6, symbol="circle", color=C_BLUE),
         hovertemplate="Met behandeling: %{y:.1f} μg/L<extra></extra>",
@@ -1209,7 +1136,7 @@ with tab3:
     fig_f.add_hline(y=70, line_dash="dot", line_color=C_RED,
                     annotation_text="Alarm (70)", annotation_font_size=10)
 
-    style(fig_f, height=360, title="")
+    style(fig_f, height=380, title="")
     fig_f.update_yaxes(title="μg/L")
     st.markdown("**Algenconcentratie — met en zonder ultrasonore behandeling**")
     st.plotly_chart(fig_f, use_container_width=True)
