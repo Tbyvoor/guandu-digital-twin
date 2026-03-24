@@ -801,6 +801,7 @@ with tab1:
                 lat=[buoy["lat"]], lon=[buoy["lon"]],
                 mode="markers",
                 marker=dict(size=30, color=f"rgba({r},{g},{b_},0.18)"),
+                customdata=[buoy["id"]],
                 hoverinfo="skip", showlegend=False,
             ))
             # Kern — customdata bevat buoy ID voor click-interactie
