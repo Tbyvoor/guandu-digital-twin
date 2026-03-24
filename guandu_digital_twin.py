@@ -803,6 +803,15 @@ with tab1:
                 marker=dict(size=30, color=f"rgba({r},{g},{b_},0.18)"),
                 hoverinfo="skip", showlegend=False,
             ))
+            # Schaduw-tekst (wit, iets groter) — geeft fake-bold effect
+            fig_map.add_trace(go.Scattermapbox(
+                lat=[buoy["lat"]], lon=[buoy["lon"]],
+                mode="text",
+                text=[buoy["id"]],
+                textposition="top center",
+                textfont=dict(size=16, color="#FFFFFF"),
+                hoverinfo="skip", showlegend=False,
+            ))
             # Kern — customdata bevat buoy ID voor click-interactie
             fig_map.add_trace(go.Scattermapbox(
                 lat=[buoy["lat"]], lon=[buoy["lon"]],
