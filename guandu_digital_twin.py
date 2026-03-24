@@ -827,11 +827,11 @@ with tab1:
         fig_map.update_layout(
             mapbox=dict(
                 style="open-street-map",
-                center=dict(lat=-22.858, lon=-43.686),
-                zoom=10,
+                center=dict(lat=-22.851, lon=-43.690),
+                zoom=11,
             ),
             margin=dict(l=0, r=0, t=0, b=0),
-            height=480,
+            height=500,
         )
         map_event = st.plotly_chart(fig_map, use_container_width=True,
                                      on_select="rerun", selection_mode="points",
