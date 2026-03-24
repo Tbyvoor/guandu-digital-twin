@@ -450,9 +450,14 @@ def predict_xgb(df_b, models_dict, buoy_id, days=21,
         # Verdunning door regen (rf=0 → geen effect, rf=2 → max 6%/dag)
         dilution = rf * 0.03
 
-        # LG Sonic kill rate — opbouw over 5 dagen, ±15% dagelijkse variatie
+        # LG Sonic kill rate — opbouw over 5 dagen
+        # Dagelijkse variatie: normaal verdeeld ±12%, zelden verminderde dag
+        # (bijv. hercalibratie, tijdelijk minder effectief door turbiditeit)
         treatment_ramp = min(1.0, i / 5.0) * treatment
-        kill_rate = treatment_ramp * 0.10 * np.random.uniform(0.85, 1.15)
+        daily_eff = np.random.normal(1.0, 0.12)           # dagelijkse variatie
+        if np.random.random() < 0.08:                      # 8% kans op verminderde dag
+            daily_eff *= np.random.uniform(0.3, 0.6)
+        kill_rate = max(0.0, treatment_ramp * 0.10 * daily_eff)
 
         # Netto populatiedynamiek
         N_next = N * (1 + growth - mortality - dilution - kill_rate)
