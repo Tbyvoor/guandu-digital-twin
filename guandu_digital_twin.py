@@ -350,86 +350,81 @@ def train_xgb_models(df_all, treatment=0.7):
     return models, metrics
 
 
-# ── XGBoost iteratieve voorspelling ───────────────────────────────────────────
-def predict_xgb(df_b, models_dict, buoy_id, days=7,
-                dt=0.0, rf=1.0, disch=1.0, treatment=0.7):
-    model, hist = models_dict[buoy_id]
-    last   = hist.iloc[-1].copy()
+# ── Wetenschappelijk fysisch voorspellingsmodel (met parameterresponse) ────────
+def predict_xgb(df_b, models_dict, buoy_id, days=21,
+                dt=0.0, rf=0.0, disch=0.0, treatment=0.0):
+    """
+    Wetenschappelijk logistisch groeimodel met cardinaal temperatuurmodel.
+    Parameters modificeren de natuurlijke algengroeidynamiek:
+      dt    = temperatuurstijging (°C, gem. over periode)
+      rf    = extra regenval (factor, 0=geen, 2=dubbel normaal)
+      disch = lozingsintensiteit (factor, 0=geen, 3=hoge lozing)
+      treatment = LG Sonic vermogen (0=uit, 1=vol)
+    Gebaseerd op: Bernard & Rémond (2012), Paerl & Huisman (2008),
+                  LG Sonic veldstudies (87% reductie in 3 weken).
+    """
+    hist = df_b.sort_values("date").reset_index(drop=True)
+    N_start   = float(hist["algae"].iloc[-1])
+    base_temp = float(hist["temp"].iloc[-1])
 
-    algae_window = hist["algae"].tail(7).tolist()
-    base_temp    = last["temp"]
-    base_ph      = last["ph"]
-    base_o2      = last["oxygen"]
-    base_turb    = last["turbidity"]
+    K     = 140.0   # draagkracht μg/L (gemeten piek Guandu 135, 1998)
+    r_max = 0.08    # max groeisnelheid /dag (veldwaarde Microcystis, Paerl 2008)
+    T_opt = 30.0    # optimum temperatuur °C
+    T_min = 15.0    # minimum temperatuur °C
+    T_max = 38.0    # maximum temperatuur °C
+    m_base = 0.008  # basale sterfte /dag (lyse + sedimentatie)
+    N_floor = max(2.0, N_start * 0.10)  # LG Sonic doodt nooit alles (~10% residu)
 
-    # LG Sonic haalt max ~90% reductie — altijd residu van ~10% startwaarde
-    N_start  = float(hist["algae"].iloc[-1])
-    N_floor  = max(2.0, N_start * 0.10)
-
+    N   = N_start
+    now = datetime.now()
     preds = []
-    now   = datetime.now()
-    K = 140   # wetenschappelijk: gemeten piek Guandu 135 μg/L (1998)
 
     for i in range(1, days + 1):
         future_date = now + timedelta(days=i)
         doy = future_date.timetuple().tm_yday
-        dow = future_date.weekday()
 
-        temp  = base_temp + dt + np.random.normal(0, 0.2)
-        solar = max(3.0, seasonal_solar(doy) + np.random.normal(0, 1.5))
-        turb  = base_turb * (1.2 / max(rf, 0.1)) * np.random.uniform(0.9, 1.1)
-        o2    = max(1.5, base_o2 - dt * 0.08 + np.random.normal(0, 0.2))
-        ph    = base_ph + np.random.normal(0, 0.05)
+        # Seizoenstemperatuur Rio de Janeiro + gebruikers delta
+        T_seasonal = base_temp + 2.5 * np.sin(2 * np.pi * (doy - 355) / 365)
+        T = T_seasonal + dt + np.random.normal(0, 0.4)
 
-        lag1 = algae_window[-1]
-        lag3 = algae_window[-3] if len(algae_window) >= 3 else algae_window[0]
-        lag7 = algae_window[-7] if len(algae_window) >= 7 else algae_window[0]
-        rm7  = np.mean(algae_window[-7:]) * disch
-        rs7  = np.std(algae_window[-7:]) if len(algae_window) >= 2 else 0.0
+        # Cardinaal temperatuurmodel (Bernard & Rémond 2012)
+        if T <= T_min or T >= T_max:
+            f_T = 0.0
+        elif T <= T_opt:
+            f_T = (T - T_min) / (T_opt - T_min)
+        else:
+            f_T = (T_max - T) / (T_max - T_opt)
 
-        row = pd.DataFrame([[temp, ph, o2, turb, solar, doy, dow,
-                              lag1, lag3, lag7, rm7, rs7, treatment]],
-                           columns=FEATURES)
+        # Lichtfactor — seizoenscyclus Rio (meer licht in zomer)
+        f_L = 0.65 + 0.35 * np.sin(2 * np.pi * (doy - 355) / 365)
 
-        xgb_pred = float(model.predict(row)[0])
+        # Nutriëntenboost door lozing (disch=0 → geen extra, disch=3 → +50% groei)
+        f_N = 1.0 + (disch / 3.0) * 0.5
 
-        N = algae_window[-1]
+        # Logistische groei: temperatuur × licht × nutriënten × draagkracht
+        growth = r_max * f_T * f_L * f_N * (1 - N / K)
 
-        # ── Sliders zijn deltas t.o.v. huidige situatie ──────────────────────
-        # Bij alles=0: algen stabiel (geen groei, geen daling)
+        # Seizoensgebonden sterfte (hoger bij suboptimale temperatuur)
+        mortality = m_base + 0.012 * (1 - f_T)
 
-        # Temperatuurstijging (dt=0 → geen groei, dt>0 → meer groei)
-        # Gebaseerd op cardinaal model: optimum 30°C, lineair tussen 0-5°C stijging
-        temp_growth = (dt / 5.0) * 0.025 * (1 - N / K)   # max 2.5%/dag bij +5°C
+        # Verdunning door regen (rf=0 → geen effect, rf=2 → max 6%/dag)
+        dilution = rf * 0.03
 
-        # Lozing (disch=0 → geen effect, disch>0 → meer nutriënten → meer groei)
-        nutrient_growth = (disch / 3.0) * 0.015 * (1 - N / K)   # max 1.5%/dag bij x3
-
-        # Totale groeisnelheid
-        growth_rate = temp_growth + nutrient_growth
-
-        # Regen verdunt algen (rf=0 → geen verdunning, rf>0 → verdunning)
-        dilution_rate = rf * 0.03   # max 6%/dag bij rf=2 (realistisch: 3-5%/dag)
-
-        # LG Sonic kill rate bouwt op over ~5 dagen (start dag 1)
-        # Gebaseerd op LG Sonic case studies: ~87% reductie na 3 weken
-        # Kleine dagelijkse schommelingen (±15%) voor realisme
+        # LG Sonic kill rate — opbouw over 5 dagen, ±15% dagelijkse variatie
         treatment_ramp = min(1.0, i / 5.0) * treatment
         kill_rate = treatment_ramp * 0.10 * np.random.uniform(0.85, 1.15)
 
-        # Netto: stabiel + groei - verdunning - kill
-        N_next = N * (1 + growth_rate - dilution_rate - kill_rate)
+        # Netto populatiedynamiek
+        N_next = N * (1 + growth - mortality - dilution - kill_rate)
+        N = max(N_floor, min(K, N_next + np.random.normal(0, N * 0.03)))
 
-        pred = max(N_floor, min(K, N_next + np.random.normal(0, N * 0.04)))
-
-        geo = max(0.0, pred * 0.5 + np.random.normal(0, 1.5))
+        geo = max(0.0, N * 0.5 + np.random.normal(0, 1.5))
         preds.append({
             "date":      future_date,
-            "algae":     round(pred, 1),
+            "algae":     round(N, 1),
             "geosmin":   round(geo, 1),
             "treatment": treatment,
         })
-        algae_window.append(pred)
 
     return pd.DataFrame(preds)
 
