@@ -11,6 +11,7 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timedelta
+import requests
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
@@ -176,6 +177,45 @@ def seasonal_solar(doy):
     return 18.0 + 6.0 * np.sin(2 * np.pi * (doy - 355) / 365)
 
 
+# ── Live temperatuurdata via Open-Meteo API ────────────────────────────────────
+@st.cache_data(ttl=3600)   # ververs elk uur
+def fetch_temperature_data():
+    """
+    Haalt dagelijkse luchttemperatuur op voor Guandu-coördinaten via Open-Meteo.
+    Watertemperatuur ≈ luchttemperatuur − 1.5°C (rivier thermische buffer).
+    Geeft dict: date → watertemperatuur (historisch + 16-daagse forecast).
+    """
+    lat, lon = -22.858, -43.686
+    url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        f"&daily=temperature_2m_max,temperature_2m_min"
+        f"&timezone=America%2FSao_Paulo"
+        f"&past_days=60&forecast_days=16"
+    )
+    try:
+        r = requests.get(url, timeout=8)
+        r.raise_for_status()
+        data = r.json()["daily"]
+        temp_map = {}
+        for d, tmax, tmin in zip(data["time"], data["temperature_2m_max"], data["temperature_2m_min"]):
+            air_temp = (tmax + tmin) / 2
+            water_temp = air_temp - 1.5   # rivier koeler dan lucht
+            temp_map[d] = round(water_temp, 1)
+        return temp_map
+    except Exception:
+        return {}   # bij fout: leeg → fallback naar seizoenswaarden
+
+
+def get_water_temp(date, base_temp, temp_map):
+    """Geeft watertemperatuur: live data indien beschikbaar, anders seizoensmodel."""
+    key = date.strftime("%Y-%m-%d")
+    if key in temp_map:
+        return temp_map[key]
+    doy = date.timetuple().tm_yday
+    return base_temp + 2.5 * np.sin(2 * np.pi * (doy - 355) / 365)
+
+
 # ── Historische lozingsgebeurtenissen — Guandu rivier ──────────────────────────
 # Gebaseerd op bekende incidenten: industriële lozingen Seropédica,
 # landbouwrunoff (suikerriet, citrus), rioolwater en 2020-crisis patronen.
@@ -247,10 +287,10 @@ def generate_history(days=60, seed=42):
         algae        = base_algae
         base_geosmin = prof["geosmin"]
 
+        temp_map_hist = fetch_temperature_data()
         for i, d in enumerate(dates):
             doy  = d.timetuple().tm_yday
-            season = np.sin(2 * np.pi * i / 365) * 2
-            temp = base_temp + season + np.random.normal(0, 0.6)
+            temp = get_water_temp(d, base_temp, temp_map_hist) + np.random.normal(0, 0.4)
             ph   = 7.2 + np.random.normal(0, 0.2)
             o2   = max(2.0, prof["o2"] - (temp - prof["temp"]) * 0.1 + np.random.normal(0, 0.3))
             turb = prof["turb"] + np.random.normal(0, 1.2)
@@ -369,23 +409,23 @@ def predict_xgb(df_b, models_dict, buoy_id, days=21,
 
     K     = 140.0   # draagkracht μg/L (gemeten piek Guandu 135, 1998)
     r_max = 0.08    # max groeisnelheid /dag (veldwaarde Microcystis, Paerl 2008)
-    T_opt = 30.0    # optimum temperatuur °C
+    T_opt = 33.0    # optimum temperatuur °C (tropische Microcystis, Brazilië)
     T_min = 15.0    # minimum temperatuur °C
-    T_max = 38.0    # maximum temperatuur °C
+    T_max = 40.0    # maximum temperatuur °C
     m_base = 0.008  # basale sterfte /dag (lyse + sedimentatie)
     N_floor = max(2.0, N_start * 0.10)  # LG Sonic doodt nooit alles (~10% residu)
 
-    N   = N_start
-    now = datetime.now()
-    preds = []
+    N        = N_start
+    now      = datetime.now()
+    temp_map = fetch_temperature_data()
+    preds    = []
 
     for i in range(1, days + 1):
         future_date = now + timedelta(days=i)
         doy = future_date.timetuple().tm_yday
 
-        # Seizoenstemperatuur Rio de Janeiro + gebruikers delta
-        T_seasonal = base_temp + 2.5 * np.sin(2 * np.pi * (doy - 355) / 365)
-        T = T_seasonal + dt + np.random.normal(0, 0.4)
+        # Live watertemperatuur (Open-Meteo) + gebruikers delta
+        T = get_water_temp(future_date, base_temp, temp_map) + dt + np.random.normal(0, 0.3)
 
         # Cardinaal temperatuurmodel (Bernard & Rémond 2012)
         if T <= T_min or T >= T_max:
@@ -446,10 +486,10 @@ def predict_scientific(df_b, buoy_id, days=90):
     hist_std  = max(1.0, hist["algae"].tail(14).std())
 
     K     = 140.0   # draagkracht (gemeten piek Guandu 135 μg/L, 1998)
-    r_max = 0.15    # max groeisnelheid cyanobacteriën (/dag) — Microcystis literatuur
-    T_opt = 30.0    # optimum temperatuur (°C)
+    r_max = 0.08    # max groeisnelheid cyanobacteriën (/dag) — veldwaarde Microcystis
+    T_opt = 33.0    # optimum temperatuur (°C) — tropische Microcystis Brazilië
     T_min = 15.0    # minimum temperatuur (°C)
-    T_max = 38.0    # maximum temperatuur (°C)
+    T_max = 40.0    # maximum temperatuur (°C)
     m_base= 0.010   # basale sterfte (/dag) — cel-lyse, uitzinking
 
     N    = N_start
