@@ -808,9 +808,9 @@ with tab1:
                 lat=[buoy["lat"]], lon=[buoy["lon"]],
                 mode="markers+text",
                 marker=dict(size=14, color=color, symbol="circle"),
-                text=[f"<b>{buoy['id']}</b><br>{buoy['name']}"],
+                text=[buoy["id"]],
                 textposition="top center",
-                textfont=dict(size=11, color=C_DARK),
+                textfont=dict(size=13, color=C_DARK, weight=800),
                 customdata=[buoy["id"]],
                 name=buoy["name"],
                 hovertemplate=(
