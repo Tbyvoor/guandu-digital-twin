@@ -476,7 +476,10 @@ def predict_xgb(df_b, models_dict, buoy_id, days=21,
 
         # Netto populatiedynamiek
         N_next = N * (1 + growth - mortality - net_rain - kill_rate)
-        N = max(N_floor, min(K, N_next + np.random.normal(0, N * 0.03)))
+        # Dagelijkse schommeling schaalt met zowel huidige concentratie als groeisnelheid
+        # Geeft een natuurlijk bloei-patroon ook tijdens behandeling
+        daily_noise = N * (0.05 + net_growth * 1.5)
+        N = max(N_floor, min(K, N_next + np.random.normal(0, daily_noise)))
 
         geo = max(0.0, N * 0.5 + np.random.normal(0, 1.5))
         preds.append({
