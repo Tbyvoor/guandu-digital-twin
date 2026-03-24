@@ -463,11 +463,14 @@ def predict_xgb(df_b, models_dict, buoy_id, days=21,
         # Dag 7+: 0.015 − ~0 = +0.015 (volledige verdunning)
 
         # LG Sonic kill rate — opbouw over 5 dagen
-        # Dagelijkse variatie: normaal verdeeld ±12%, zelden verminderde dag
-        # (bijv. hercalibratie, tijdelijk minder effectief door turbiditeit)
+        # Variatie koppelt aan algengroei zonder behandeling:
+        # Bij hogere groeisnelheid (bloei) → meer dagelijkse fluctuatie in effectiviteit
+        # Biologisch: snellere celdeling = meer variatie in gasblaasjesdichtheid
+        net_growth = max(0.0, growth - mortality)           # groei zonder behandeling
+        noise_scale = min(0.22, 0.08 + net_growth * 2.5)   # schaal met groeisnelheid
         treatment_ramp = min(1.0, i / 5.0) * treatment
-        daily_eff = np.random.normal(1.0, 0.12)           # dagelijkse variatie
-        if np.random.random() < 0.08:                      # 8% kans op verminderde dag
+        daily_eff = np.random.normal(1.0, noise_scale)
+        if np.random.random() < 0.08:                       # 8% kans op verminderde dag
             daily_eff *= np.random.uniform(0.3, 0.6)
         kill_rate = max(0.0, treatment_ramp * 0.10 * daily_eff)
 
