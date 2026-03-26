@@ -15,6 +15,7 @@ import requests
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
+from streamlit_plotly_events import plotly_events
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -164,6 +165,24 @@ st.markdown(f"""
   [data-testid="stPlotlyChart"] iframe {{
     border-radius: 14px !important;
     overflow: hidden;
+  }}
+
+  /* Buoy kaart-knoppen */
+  div[data-testid="stButton"]:has(button[key^="buoy_card_"]) button,
+  div[data-testid="stButton"] button[data-testid*="buoy_card"] {{
+    background: {C_CHART_BG} !important;
+    border: 1px solid #1E3A5F !important;
+    border-radius: 8px !important;
+    color: {C_WHITE} !important;
+    text-align: left !important;
+    white-space: pre-wrap !important;
+    font-size: 11px !important;
+    padding: 10px 12px !important;
+    margin-bottom: 2px !important;
+  }}
+  div[data-testid="stButton"]:has(button[key^="buoy_card_"]) button:hover {{
+    border-color: {C_BLUE} !important;
+    background: #1A2E45 !important;
   }}
 
   /* Hide streamlit branding */
@@ -639,7 +658,7 @@ df      = generate_history(60)
 latest  = df.groupby("buoy_id").last().reset_index()
 now_str = datetime.now().strftime("%d %b %Y, %H:%M")
 
-# ── Session state voor klikbare kaart ─────────────────────────────────────────
+# ── Session state ──────────────────────────────────────────────────────────────
 if "selected_buoy" not in st.session_state:
     st.session_state.selected_buoy = "B01"
 
@@ -845,10 +864,8 @@ def _snap_buoys_to_river():
     for b in BUOYS:
         idx = min(range(len(_t_r_lats)),
                   key=lambda i: (_t_r_lats[i]-b["lat"])**2+(_t_r_lons[i]-b["lon"])**2)
-        gi  = int(np.clip(np.searchsorted(_t_lats_g, _t_r_lats[idx])-1, 0, len(_t_lats_g)-2))
-        gj  = int(np.clip(np.searchsorted(_t_lons_g, _t_r_lons[idx])-1, 0, len(_t_lons_g)-2))
-        z   = max(_grid_elev(_t_r_lats[idx], _t_r_lons[idx]),
-                  float(_t_elev_g[gi, gj])) + 6
+        # Gebruik de rivier-wateroppervlak hoogte (zelfde als de gekleurde rivierijn)
+        z = _t_r_elev[idx]
         out.append({"id": b["id"], "name": b["name"],
                     "lat": _t_r_lats[idx], "lon": _t_r_lons[idx], "z": z})
     return out
@@ -1019,35 +1036,30 @@ with tab1:
             overall = "alert" if "alert" in [s_algae, s_geo, s_o2] \
                       else "warn" if "warn" in [s_algae, s_geo, s_o2] \
                       else "ok"
-            icon, color = STATUS_ICON[overall]
+            _, color = STATUS_ICON[overall]
             buoy_name = next(b["name"] for b in BUOYS if b["id"] == row["buoy_id"])
             st.markdown(f"""
-            <div style="background:{C_WHITE}; border:1px solid {C_BORDER}; border-radius:8px;
+            <div style="background:{C_CHART_BG}; border:1px solid #1E3A5F; border-radius:8px;
                         padding:10px 12px; margin-bottom:6px; border-left:3px solid {color};">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                <span style="font-size:12px; font-weight:700; color:{C_DARK};">{row['buoy_id']}</span>
-                <span style="font-size:10px; font-weight:600; color:{color}; background:{'#FEF2F2' if color==C_RED else '#FFFBEB' if color==C_YELLOW else '#F0FDF4'};
-                      padding:2px 6px; border-radius:4px;">
-                  {'ALARM' if overall=='alert' else 'WAARSCH.' if overall=='warn' else 'OK'}
-                </span>
+                <span style="font-size:12px; font-weight:700; color:{C_WHITE};">{row['buoy_id']}</span>
+                <span style="font-size:10px; color:#94A3B8;">{buoy_name}</span>
               </div>
-              <div style="font-size:11px; color:#475569; margin-bottom:5px;">{buoy_name}</div>
               <div style="display:flex; justify-content:space-between;">
                 <div>
-                  <div style="font-size:10px; color:#64748B;">Algen</div>
-                  <div style="font-size:12px; font-weight:600; color:{C_DARK};">{row['algae']} <span style="font-size:9px; color:#64748B;">μg/L</span></div>
+                  <div style="font-size:10px; color:#94A3B8;">Algen</div>
+                  <div style="font-size:12px; font-weight:600; color:{C_WHITE};">{row['algae']} <span style="font-size:9px; color:#94A3B8;">μg/L</span></div>
                 </div>
                 <div>
-                  <div style="font-size:10px; color:#64748B;">Geosmin</div>
-                  <div style="font-size:12px; font-weight:600; color:{C_DARK};">{row['geosmin']} <span style="font-size:9px; color:#64748B;">ng/L</span></div>
+                  <div style="font-size:10px; color:#94A3B8;">Geosmin</div>
+                  <div style="font-size:12px; font-weight:600; color:{C_WHITE};">{row['geosmin']} <span style="font-size:9px; color:#94A3B8;">ng/L</span></div>
                 </div>
                 <div>
-                  <div style="font-size:10px; color:#64748B;">O₂</div>
-                  <div style="font-size:12px; font-weight:600; color:{C_DARK};">{row['oxygen']} <span style="font-size:9px; color:#64748B;">mg/L</span></div>
+                  <div style="font-size:10px; color:#94A3B8;">O₂</div>
+                  <div style="font-size:12px; font-weight:600; color:{C_WHITE};">{row['oxygen']} <span style="font-size:9px; color:#94A3B8;">mg/L</span></div>
                 </div>
               </div>
-            </div>
-            """, unsafe_allow_html=True)
+            </div>""", unsafe_allow_html=True)
 
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -1177,11 +1189,11 @@ with tab2:
         for species, color, desc in info_rows:
             pct = round(species_vals[species] / latest_b["algae"] * 100, 0) if latest_b["algae"] > 0 else 0
             st.markdown(f"""
-            <div style="background:#F8FAFC;border-left:4px solid {color};border-radius:6px;
+            <div style="background:#111E2D;border-left:4px solid {color};border-radius:6px;
                         padding:8px 12px;margin-bottom:6px;">
               <span style="font-weight:700;color:{color};font-size:13px;">{species}</span>
-              <span style="font-size:12px;color:{C_MUTED};float:right;">{pct:.0f}% · {species_vals[species]:.1f} μg/L</span>
-              <div style="font-size:11px;color:{C_TEXT};margin-top:2px;">{desc}</div>
+              <span style="font-size:12px;color:#94A3B8;float:right;">{pct:.0f}% · {species_vals[species]:.1f} μg/L</span>
+              <div style="font-size:11px;color:{C_WHITE};margin-top:2px;">{desc}</div>
             </div>""", unsafe_allow_html=True)
 
 
@@ -1257,7 +1269,7 @@ with tab3:
     # Historie
     fig_f.add_trace(go.Scatter(
         x=hist14["date"], y=hist14["algae"], mode="lines",
-        name="Historisch (gemeten)", line=dict(color=C_DARK, width=2),
+        name="Historisch (gemeten)", line=dict(color="#00BCD4", width=2),
         hovertemplate="%{y:.1f} μg/L<extra></extra>",
     ))
     # Voorspelling met behandeling
@@ -1287,23 +1299,23 @@ with tab3:
     besparing = df_no_treat["algae"].max() - df_pred["algae"].max()
     pct = (besparing / max(df_no_treat["algae"].max(), 0.1)) * 100
     st.markdown(f"""
-    <div style="background:{C_WHITE}; border:1px solid {C_BORDER}; border-radius:8px;
+    <div style="background:{C_CHART_BG}; border:1px solid #1E3A5F; border-radius:8px;
                 padding:14px 20px; display:flex; gap:32px; align-items:center; margin-bottom:16px;">
       <div style="text-align:center;">
-        <div style="font-size:11px; color:{C_MUTED}; font-weight:600; text-transform:uppercase;">Zonder behandeling</div>
+        <div style="font-size:11px; color:#94A3B8; font-weight:600; text-transform:uppercase;">Zonder behandeling</div>
         <div style="font-size:22px; font-weight:700; color:{C_RED};">{df_no_treat['algae'].max():.1f} <span style="font-size:13px;">μg/L</span></div>
-        <div style="font-size:11px; color:{C_MUTED};">piek verwacht</div>
+        <div style="font-size:11px; color:#94A3B8;">piek verwacht</div>
       </div>
-      <div style="font-size:28px; color:{C_MUTED};">→</div>
+      <div style="font-size:28px; color:#94A3B8;">→</div>
       <div style="text-align:center;">
-        <div style="font-size:11px; color:{C_MUTED}; font-weight:600; text-transform:uppercase;">Met LG Sonic ({int(treatment*100)}%)</div>
+        <div style="font-size:11px; color:#94A3B8; font-weight:600; text-transform:uppercase;">Met LG Sonic ({int(treatment*100)}%)</div>
         <div style="font-size:22px; font-weight:700; color:{C_GREEN};">{df_pred['algae'].max():.1f} <span style="font-size:13px;">μg/L</span></div>
-        <div style="font-size:11px; color:{C_MUTED};">piek verwacht</div>
+        <div style="font-size:11px; color:#94A3B8;">piek verwacht</div>
       </div>
-      <div style="text-align:center; background:#F0FDF4; border-radius:8px; padding:10px 16px;">
-        <div style="font-size:11px; color:{C_MUTED}; font-weight:600; text-transform:uppercase;">Reductie</div>
+      <div style="text-align:center; background:#0D2818; border-radius:8px; padding:10px 16px;">
+        <div style="font-size:11px; color:#94A3B8; font-weight:600; text-transform:uppercase;">Reductie</div>
         <div style="font-size:22px; font-weight:700; color:{C_GREEN};">−{pct:.0f}%</div>
-        <div style="font-size:11px; color:{C_MUTED};">door ultrasonore behandeling</div>
+        <div style="font-size:11px; color:#94A3B8;">door ultrasonore behandeling</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1382,20 +1394,20 @@ with tab3:
 
     cols = st.columns(4, gap="small")
     for col, card in zip(cols, cards):
-        bg    = "#F0FDF4" if card["positief"] else "#FEF2F2"
+        bg    = "#0D2818" if card["positief"] else "#280D0D"
         color = C_GREEN   if card["positief"] else C_RED
         sign  = "" if card["delta"] < 0 else "+"
         col.markdown(f"""
-        <div style="background:{bg}; border:1px solid {color}33; border-radius:10px;
+        <div style="background:{bg}; border:1px solid {color}55; border-radius:10px;
                     padding:14px 12px; text-align:center;">
-          <div style="font-size:11px; font-weight:700; color:{C_MUTED};
+          <div style="font-size:11px; font-weight:700; color:#94A3B8;
                       text-transform:uppercase; margin-bottom:6px;">{card['label']}</div>
           <div style="font-size:30px; font-weight:800; color:{color}; line-height:1.1;">
             {card['icon']} {abs(card['delta']):.0f}
             <span style="font-size:13px;">μg/L</span>
           </div>
-          <div style="font-size:11px; color:{C_TEXT}; margin-top:6px;">{card['uitleg']}</div>
-          <div style="font-size:10px; color:{C_MUTED}; margin-top:4px;">
+          <div style="font-size:11px; color:{C_WHITE}; margin-top:6px;">{card['uitleg']}</div>
+          <div style="font-size:10px; color:#94A3B8; margin-top:4px;">
             Piek: <b>{card['peak']:.0f} μg/L</b>
           </div>
         </div>""", unsafe_allow_html=True)
@@ -1407,12 +1419,12 @@ with tab3:
     icon, color = STATUS_ICON[s]
     label   = {"ok": "Laag risico", "warn": "Verhoogd risico", "alert": "Hoog risico"}[s]
     st.markdown(f"""
-    <div style="background:{C_WHITE}; border:1px solid {C_BORDER}; border-radius:8px;
+    <div style="background:{C_CHART_BG}; border:1px solid #1E3A5F; border-radius:8px;
                 padding:14px 18px; display:flex; gap:20px; align-items:center; margin-top:4px;">
       <div style="font-size:28px;">{icon}</div>
       <div>
         <div style="font-size:13px; font-weight:700; color:{color};">{label}</div>
-        <div style="font-size:12px; color:{C_TEXT}; margin-top:2px;">
+        <div style="font-size:12px; color:{C_WHITE}; margin-top:2px;">
           Piek verwacht op <b>{max_day}</b> — <b>{max_a:.1f} μg/L</b>
         </div>
       </div>
@@ -1518,7 +1530,7 @@ with tab5:
 
         if not alerts:
             st.markdown(f"""
-            <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px;
+            <div style="background:#0D2818; border:1px solid #27AE6055; border-radius:8px;
                         padding:16px; text-align:center; color:{C_GREEN}; font-weight:600;">
               ✓ Alle parameters binnen normen
             </div>""", unsafe_allow_html=True)
@@ -1555,24 +1567,22 @@ with tab5:
             ("14:05", "B01", "INFO",  "Sensorcheck voltooid — alle systemen operationeel"),
             ("09:20", "B04", "WARN",  "Lichte turbiditeitstoename gedetecteerd"),
         ]
-        st.markdown(f"""
-        <div style="background:{C_WHITE}; border:1px solid {C_BORDER}; border-radius:8px;
-                    padding:12px 16px; font-family:'Courier New',monospace; font-size:11px;">
-        """, unsafe_allow_html=True)
+        _log_rows = ""
         for time, buoy, level, msg in log:
-            lcolor = {
-                "INFO": C_BLUE, "WARN": C_YELLOW, "ALARM": C_RED
-            }.get(level, C_MUTED)
-            st.markdown(
+            lcolor = {"INFO": C_BLUE, "WARN": C_YELLOW, "ALARM": C_RED}.get(level, C_WHITE)
+            _log_rows += (
                 f'<div class="log-row">'
-                f'<span style="color:{C_MUTED}">{time}</span>  '
-                f'<span style="color:{C_DARK};font-weight:700">{buoy}</span>  '
+                f'<span style="color:#94A3B8">{time}</span>  '
+                f'<span style="color:{C_WHITE};font-weight:700">{buoy}</span>  '
                 f'<span style="color:{lcolor};font-weight:700">[{level}]</span>  '
-                f'<span style="color:{C_TEXT}">{msg}</span>'
-                f'</div>',
-                unsafe_allow_html=True
+                f'<span style="color:{C_WHITE}">{msg}</span>'
+                f'</div>'
             )
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="background:{C_CHART_BG}; border:1px solid #1E3A5F; border-radius:8px;
+                    padding:12px 16px; font-family:'Courier New',monospace; font-size:11px;">
+        {_log_rows}
+        </div>""", unsafe_allow_html=True)
 
 
 if False:
