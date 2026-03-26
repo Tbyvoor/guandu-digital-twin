@@ -15,7 +15,6 @@ import requests
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
-from streamlit_plotly_events import plotly_events
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 st.set_page_config(
