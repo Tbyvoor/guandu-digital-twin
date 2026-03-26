@@ -34,25 +34,29 @@ C_YELLOW  = "#F39C12"
 C_DARK    = "#0D1B2A"
 C_MID     = "#1E3A5F"
 C_LIGHT   = "#F0F4F8"
-C_TEXT    = "#2C3E50"
-C_MUTED   = "#7F8C8D"
+C_TEXT    = "#FFFFFF"
+C_MUTED   = "#FFFFFF"
 C_WHITE   = "#FFFFFF"
 C_BORDER  = "#DDE3E9"
 
+C_CHART_BG = "#111E2D"   # donker achtergrond voor 2D grafieken
+
 CHART = dict(
-    plot_bgcolor=C_WHITE,
-    paper_bgcolor=C_WHITE,
-    font=dict(family="Inter, sans-serif", color=C_TEXT, size=12),
-    legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=C_BORDER, borderwidth=1,
-                font=dict(size=11), orientation="h", yanchor="bottom", y=1.02),
+    plot_bgcolor=C_CHART_BG,
+    paper_bgcolor=C_CHART_BG,
+    font=dict(family="Inter, sans-serif", color=C_WHITE, size=12),
+    legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor="#1E3A5F", borderwidth=1,
+                font=dict(size=11, color=C_WHITE), orientation="h", yanchor="bottom", y=1.02),
 )
 
 def style(fig, height=280, title="", margin_l=12):
     fig.update_layout(**CHART, height=height,
                       margin=dict(l=margin_l, r=12, t=36, b=12),
-                      title=dict(text=title, font=dict(size=13)))
-    fig.update_xaxes(showgrid=False, zeroline=False, linecolor=C_BORDER, tickfont=dict(size=11))
-    fig.update_yaxes(gridcolor="#EEF2F6", zeroline=False, linecolor=C_BORDER, tickfont=dict(size=11))
+                      title=dict(text=title, font=dict(size=13, color="#CBD5E1")))
+    fig.update_xaxes(showgrid=False, zeroline=False, linecolor="#1E3A5F",
+                     tickfont=dict(size=11, color="#94A3B8"))
+    fig.update_yaxes(gridcolor="#1A2E45", zeroline=False, linecolor="#1E3A5F",
+                     tickfont=dict(size=11, color="#94A3B8"))
     return fig
 
 # ── CSS ────────────────────────────────────────────────────────────────────────
@@ -60,7 +64,10 @@ st.markdown(f"""
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-  html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; }}
+  html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; color: {C_WHITE}; }}
+
+  /* Global text override — p en labels wit, geen span zodat inline kleuren bewaard blijven */
+  p, label, li, td, th {{ color: {C_WHITE}; }}
 
   /* Sidebar */
   [data-testid="stSidebar"] {{
@@ -75,12 +82,17 @@ st.markdown(f"""
   [data-testid="stSidebar"] hr {{ border-color: #1E3A5F !important; }}
 
   /* Main bg */
-  .main .block-container {{ background: {C_LIGHT}; padding-top: 1.5rem; }}
+  .stApp, .main {{ background: {C_DARK} !important; }}
+  .main .block-container {{ background: {C_DARK}; padding-top: 1.5rem; }}
+
+  /* Streamlit native text elements — geen !important op span zodat inline kleuren bewaard blijven */
+  .stMarkdown, .stMarkdown p, .stCaption, .stCaption p,
+  [data-testid="stMarkdownContainer"] p {{ color: {C_WHITE} !important; }}
 
   /* Tabs */
-  .stTabs [data-baseweb="tab-list"] {{ gap: 4px; border-bottom: 2px solid {C_BORDER}; }}
+  .stTabs [data-baseweb="tab-list"] {{ gap: 4px; border-bottom: 2px solid #1E3A5F; background: {C_DARK}; }}
   .stTabs [data-baseweb="tab"] {{
-    font-size: 13px; font-weight: 600; color: {C_MUTED};
+    font-size: 13px; font-weight: 600; color: {C_WHITE};
     padding: 8px 18px; border-radius: 6px 6px 0 0;
     background: transparent; border: none;
   }}
@@ -88,23 +100,23 @@ st.markdown(f"""
 
   /* KPI cards */
   .kpi-card {{
-    background: {C_WHITE};
+    background: {C_MID};
     border-radius: 10px;
     padding: 18px 20px;
-    border: 1px solid {C_BORDER};
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    border: 1px solid #1E3A5F;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.3);
   }}
-  .kpi-label {{ font-size: 11px; font-weight: 600; color: {C_MUTED}; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }}
-  .kpi-value {{ font-size: 26px; font-weight: 700; color: {C_DARK}; line-height: 1.1; }}
-  .kpi-sub   {{ font-size: 11px; color: {C_MUTED}; margin-top: 4px; }}
+  .kpi-label {{ font-size: 11px; font-weight: 600; color: {C_WHITE}; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }}
+  .kpi-value {{ font-size: 26px; font-weight: 700; color: {C_WHITE}; line-height: 1.1; }}
+  .kpi-sub   {{ font-size: 11px; color: {C_WHITE}; margin-top: 4px; }}
   .kpi-ok    {{ color: {C_GREEN}; }}
   .kpi-warn  {{ color: {C_YELLOW}; }}
   .kpi-alert {{ color: {C_RED}; }}
 
   /* Buoy status cards */
   .buoy-card {{
-    background: {C_WHITE};
-    border: 1px solid {C_BORDER};
+    background: {C_MID};
+    border: 1px solid #1E3A5F;
     border-radius: 8px;
     padding: 12px 14px;
     margin-bottom: 8px;
@@ -113,9 +125,9 @@ st.markdown(f"""
     gap: 12px;
   }}
   .buoy-dot {{ width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }}
-  .buoy-id  {{ font-size: 12px; font-weight: 700; color: {C_DARK}; min-width: 28px; }}
-  .buoy-name{{ font-size: 12px; color: {C_MUTED}; flex: 1; }}
-  .buoy-vals{{ font-size: 11px; color: {C_TEXT}; text-align: right; }}
+  .buoy-id  {{ font-size: 12px; font-weight: 700; color: {C_WHITE}; min-width: 28px; }}
+  .buoy-name{{ font-size: 12px; color: {C_WHITE}; flex: 1; }}
+  .buoy-vals{{ font-size: 11px; color: {C_WHITE}; text-align: right; }}
 
   /* Alert cards */
   .alert-card {{
@@ -127,25 +139,32 @@ st.markdown(f"""
     gap: 14px;
     align-items: flex-start;
   }}
-  .alert-red    {{ background: #FEF2F2; border-color: #FECACA; }}
-  .alert-orange {{ background: #FFFBEB; border-color: #FDE68A; }}
+  .alert-red    {{ background: rgba(192,57,43,0.15); border-color: rgba(192,57,43,0.4); }}
+  .alert-orange {{ background: rgba(243,156,18,0.12); border-color: rgba(243,156,18,0.4); }}
   .alert-icon   {{ line-height: 1; display:flex; align-items:flex-start; padding-top:2px; }}
-  .alert-title  {{ font-size: 13px; font-weight: 700; color: {C_DARK}; }}
-  .alert-body   {{ font-size: 12px; color: {C_TEXT}; margin-top: 2px; }}
-  .alert-action {{ font-size: 11px; color: {C_MUTED}; margin-top: 6px; font-style: italic; }}
+  .alert-title  {{ font-size: 13px; font-weight: 700; color: {C_WHITE}; }}
+  .alert-body   {{ font-size: 12px; color: {C_WHITE}; margin-top: 2px; }}
+  .alert-action {{ font-size: 11px; color: {C_WHITE}; margin-top: 6px; font-style: italic; }}
 
   /* Log */
-  .log-row {{ font-family: 'Courier New', monospace; font-size: 11px; padding: 4px 0; border-bottom: 1px solid {C_BORDER}; }}
+  .log-row {{ font-family: 'Courier New', monospace; font-size: 11px; padding: 4px 0; border-bottom: 1px solid #1E3A5F; color: {C_WHITE}; }}
 
   /* Section labels */
   .section-label {{
-    font-size: 11px; font-weight: 700; color: {C_MUTED};
+    font-size: 11px; font-weight: 700; color: {C_WHITE};
     text-transform: uppercase; letter-spacing: 0.08em;
     margin-bottom: 12px; margin-top: 4px;
   }}
 
   /* Divider */
-  hr {{ border: none; border-top: 1px solid {C_BORDER}; margin: 16px 0; }}
+  hr {{ border: none; border-top: 1px solid #1E3A5F; margin: 16px 0; }}
+
+  /* Ronde hoeken voor grafieken */
+  [data-testid="stPlotlyChart"] > div,
+  [data-testid="stPlotlyChart"] iframe {{
+    border-radius: 14px !important;
+    overflow: hidden;
+  }}
 
   /* Hide streamlit branding */
   #MainMenu, footer {{ visibility: hidden; }}
@@ -768,6 +787,199 @@ col5.markdown(kpi("Actieve alerts",   f"{n_alerts} / 8",
 
 st.markdown("<br>", unsafe_allow_html=True)
 
+
+# ── Terrain 3D — gedeelde initialisatie (gebruikt in tab1, tab3, tab6) ────────
+@st.cache_data(ttl=86400, show_spinner="Hoogtedata ophalen via Open-Elevation…")
+def _fetch_elevation_grid(lat_min=-22.74, lat_max=-22.62,
+                          lon_min=-43.88, lon_max=-43.62, steps=30):
+    lats = np.linspace(lat_min, lat_max, steps)
+    lons = np.linspace(lon_min, lon_max, steps)
+    locations = [{"latitude": float(la), "longitude": float(lo)}
+                 for la in lats for lo in lons]
+    try:
+        resp = requests.post("https://api.open-elevation.com/api/v1/lookup",
+                             json={"locations": locations}, timeout=30)
+        elev = np.array([r["elevation"] for r in resp.json()["results"]], dtype=float)
+        return lats, lons, elev.reshape(steps, steps)
+    except Exception:
+        LA, LO = np.meshgrid(lats, lons, indexing="ij")
+        elev = (80 + 120 * np.exp(-((LA+22.70)**2+(LO+43.80)**2)/0.008)
+                   + 60  * np.exp(-((LA+22.65)**2+(LO+43.70)**2)/0.006)
+                   + 20  * np.random.rand(steps, steps))
+        return lats, lons, elev
+
+_t_lats_g, _t_lons_g, _t_elev_raw = _fetch_elevation_grid()
+
+def _grid_elev(lat, lon, elev_raw=_t_elev_raw, lats=_t_lats_g, lons=_t_lons_g):
+    i0 = int(np.clip(np.searchsorted(lats, lat) - 1, 0, len(lats)-2))
+    j0 = int(np.clip(np.searchsorted(lons, lon) - 1, 0, len(lons)-2))
+    di = float(np.clip((lat - lats[i0]) / (lats[i0+1] - lats[i0] + 1e-9), 0, 1))
+    dj = float(np.clip((lon - lons[j0]) / (lons[j0+1] - lons[j0] + 1e-9), 0, 1))
+    return float(elev_raw[i0,j0]*(1-di)*(1-dj) + elev_raw[i0+1,j0]*di*(1-dj)
+                +elev_raw[i0,j0+1]*(1-di)*dj   + elev_raw[i0+1,j0+1]*di*dj)
+
+# River path sampled from OSM, elevation from grid
+_t_sample  = RIVER_PATH[::10]
+_t_r_lats  = [float(p[0]) for p in _t_sample]
+_t_r_lons  = [float(p[1]) for p in _t_sample]
+_t_r_elev  = [_grid_elev(la, lo) + 3.0 for la, lo in zip(_t_r_lats, _t_r_lons)]
+
+# Valley carving
+_t_elev_g  = _t_elev_raw.copy()
+for _gi in range(len(_t_lats_g)):
+    for _gj in range(len(_t_lons_g)):
+        _near = min(range(len(_t_r_lats)),
+                    key=lambda k: (_t_r_lats[k]-_t_lats_g[_gi])**2
+                                 +(_t_r_lons[k]-_t_lons_g[_gj])**2)
+        _dist = ((_t_r_lats[_near]-_t_lats_g[_gi])**2
+                +(_t_r_lons[_near]-_t_lons_g[_gj])**2)**0.5
+        if _dist < 0.020:
+            _rz = _t_r_elev[_near] - 3.0
+            _w  = max(0.0, 1.0 - _dist/0.020)**1.2
+            _t_elev_g[_gi, _gj] = min(_t_elev_g[_gi, _gj],
+                                      _t_elev_g[_gi,_gj]*(1-_w) + _rz*_w)
+
+# Buoys snapped to river
+def _snap_buoys_to_river():
+    out = []
+    for b in BUOYS:
+        idx = min(range(len(_t_r_lats)),
+                  key=lambda i: (_t_r_lats[i]-b["lat"])**2+(_t_r_lons[i]-b["lon"])**2)
+        gi  = int(np.clip(np.searchsorted(_t_lats_g, _t_r_lats[idx])-1, 0, len(_t_lats_g)-2))
+        gj  = int(np.clip(np.searchsorted(_t_lons_g, _t_r_lons[idx])-1, 0, len(_t_lons_g)-2))
+        z   = max(_grid_elev(_t_r_lats[idx], _t_r_lons[idx]),
+                  float(_t_elev_g[gi, gj])) + 6
+        out.append({"id": b["id"], "name": b["name"],
+                    "lat": _t_r_lats[idx], "lon": _t_r_lons[idx], "z": z})
+    return out
+
+_t_buoys_3d = _snap_buoys_to_river()
+
+# Depth profile (synthetic, realistisch voor Guandu)
+def _make_depth(n):
+    np.random.seed(42)
+    t = np.linspace(0, 1, n)
+    return list(np.clip(3.5+2.0*np.sin(t*np.pi)+1.2*np.sin(t*4*np.pi+0.8)
+                        +0.4*np.random.randn(n), 1.0, 8.0))
+
+_t_r_depth = _make_depth(len(_t_r_lats))
+_t_r_bed   = [e-d for e, d in zip(_t_r_elev, _t_r_depth)]
+
+
+def render_terrain_3d(algae_per_buoy: dict, title: str = "", height: int = 580) -> go.Figure:
+    """
+    Bouw het 3D terrein model.
+    algae_per_buoy: dict {buoy_id: algae_value_μg/L}
+    """
+    # Interpoleer algenwaarden langs rivierpunten
+    _indices, _vals = [], []
+    for b in _t_buoys_3d:
+        idx = min(range(len(_t_r_lats)),
+                  key=lambda i: (_t_r_lats[i]-b["lat"])**2+(_t_r_lons[i]-b["lon"])**2)
+        _indices.append(idx)
+        _vals.append(float(algae_per_buoy.get(b["id"], 20.0)))
+    _pairs  = sorted(zip(_indices, _vals))
+    _si, _sa = [p[0] for p in _pairs], [p[1] for p in _pairs]
+    _si  = [0] + _si  + [len(_t_r_lats)-1]
+    _sa  = [_sa[0]] + _sa + [_sa[-1]]
+    r_algae = list(np.interp(range(len(_t_r_lats)), _si, _sa))
+
+    fig = go.Figure()
+
+    # Terrein
+    fig.add_trace(go.Surface(
+        x=_t_lons_g, y=_t_lats_g, z=_t_elev_g,
+        colorscale=[[0.0,"#2D6A4F"],[0.35,"#74C69D"],[0.65,"#B7E4C7"],
+                    [0.85,"#D4A574"],[1.0,"#A0856B"]],
+        opacity=0.85, showscale=True,
+        colorbar=dict(title="Hoogte (m)", thickness=12, len=0.55, x=1.02,
+                      tickfont=dict(size=9)),
+        contours=dict(z=dict(show=True, usecolormap=True, highlightcolor="white")),
+        name="Terrein",
+        hovertemplate="Hoogte: %{z:.0f} m<extra></extra>",
+    ))
+
+    # Wateroppervlak gekleurd op algenconcentratie
+    fig.add_trace(go.Scatter3d(
+        x=_t_r_lons, y=_t_r_lats, z=_t_r_elev,
+        mode="lines",
+        line=dict(color=r_algae,
+                  colorscale=[[0.0,"#27AE60"],[0.35,"#F1C40F"],
+                               [0.65,"#E67E22"],[1.0,"#C0392B"]],
+                  cmin=0, cmax=80, width=7,
+                  colorbar=dict(title=dict(text="Algen (μg/L)", font=dict(color="#94A3B8",size=10)),
+                                thickness=10, len=0.45, x=0.0,
+                                tickfont=dict(color="#94A3B8",size=9),
+                                tickvals=[0,20,40,60,80])),
+        name="Wateroppervlak",
+        customdata=[[r_algae[i], _t_r_depth[i]] for i in range(len(r_algae))],
+        hovertemplate="Algen: %{customdata[0]:.1f} μg/L<br>Diepte: %{customdata[1]:.1f} m<extra></extra>",
+    ))
+
+    # Rivierbodem
+    fig.add_trace(go.Scatter3d(
+        x=_t_r_lons, y=_t_r_lats, z=_t_r_bed,
+        mode="lines",
+        line=dict(color="#4A4A6A", width=3, dash="dot"),
+        name="Rivierbodem",
+        hovertemplate="Rivierbodem: %{z:.0f} m<extra></extra>",
+    ))
+
+    # Waterzuilen
+    for idx in range(0, len(_t_r_lats), 5):
+        fig.add_trace(go.Scatter3d(
+            x=[_t_r_lons[idx],_t_r_lons[idx]],
+            y=[_t_r_lats[idx],_t_r_lats[idx]],
+            z=[_t_r_bed[idx], _t_r_elev[idx]],
+            mode="lines", line=dict(color="rgba(0,150,199,0.25)", width=2),
+            showlegend=False, hoverinfo="skip",
+        ))
+
+    # Buoy markers
+    algae_colors_3d = []
+    for b in _t_buoys_3d:
+        v = algae_per_buoy.get(b["id"], 20.0)
+        algae_colors_3d.append(C_GREEN if v < 30 else C_YELLOW if v < 60 else C_RED)
+
+    fig.add_trace(go.Scatter3d(
+        x=[b["lon"] for b in _t_buoys_3d],
+        y=[b["lat"] for b in _t_buoys_3d],
+        z=[b["z"]   for b in _t_buoys_3d],
+        mode="markers+text",
+        marker=dict(size=9, color=algae_colors_3d,
+                    line=dict(color=C_WHITE, width=1)),
+        text=[b["id"] for b in _t_buoys_3d],
+        textposition="top center",
+        textfont=dict(size=10, color=C_WHITE),
+        name="MPC-Buoys",
+        customdata=[[b["name"], round(algae_per_buoy.get(b["id"], 20.0), 1)]
+                    for b in _t_buoys_3d],
+        hovertemplate="<b>%{text} — %{customdata[0]}</b><br>Algen: %{customdata[1]} μg/L<extra></extra>",
+    ))
+
+    fig.update_layout(
+        height=height,
+        margin=dict(l=0, r=0, t=36, b=0),
+        paper_bgcolor=C_DARK,
+        title=dict(text=title, font=dict(color=C_WHITE, size=13), x=0.0, xanchor="left") if title else {},
+        scene=dict(
+            xaxis=dict(title="Lengtegraad", backgroundcolor=C_DARK,
+                       gridcolor="#1E3A5F", tickfont=dict(color="#94A3B8",size=9)),
+            yaxis=dict(title="Breedtegraad", backgroundcolor=C_DARK,
+                       gridcolor="#1E3A5F", tickfont=dict(color="#94A3B8",size=9)),
+            zaxis=dict(title="Hoogte (m)", backgroundcolor=C_DARK,
+                       gridcolor="#1E3A5F", tickfont=dict(color="#94A3B8",size=9)),
+            bgcolor=C_DARK,
+            camera=dict(eye=dict(x=1.4, y=-1.6, z=0.9)),
+            aspectmode="manual",
+            aspectratio=dict(x=2.2, y=1.2, z=0.4),
+        ),
+        legend=dict(font=dict(color="#94A3B8",size=11), bgcolor="rgba(0,0,0,0)",
+                    orientation="h", yanchor="bottom", y=-0.08, xanchor="center", x=0.5),
+    )
+    return fig
+
+
 # ── Tabs ───────────────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "  Kaart & Overzicht  ",
@@ -785,228 +997,18 @@ with tab1:
     col_map, col_right = st.columns([3, 1], gap="medium")
 
     with col_map:
-        st.markdown('<p class="section-label">Live buoy kaart — Guandu rivier</p>', unsafe_allow_html=True)
-
-        dot_colors = []
-        for _, row in latest.iterrows():
-            s = status(row["algae"], "algae")
-            dot_colors.append({"ok": C_GREEN, "warn": C_YELLOW, "alert": C_RED}[s])
-
-        # Algenwaarden per buoy ophalen
-        algae_map = {b["id"]: latest[latest["buoy_id"] == b["id"]]["algae"].values[0] for b in BUOYS}
-
-        def algae_to_color(val, opacity=1.0):
-            """Blauw → groen → oranje → rood op basis van algenconcentratie."""
-            if val < 20:   return f"rgba(0,180,255,{opacity})"
-            elif val < 40: return f"rgba(39,174,96,{opacity})"
-            elif val < 70: return f"rgba(243,156,18,{opacity})"
-            else:          return f"rgba(192,57,43,{opacity})"
-
-        fig_map = go.Figure()
-
-        # Rivier segmenten — elk segment gekleurd op algenwaarde van die buoy
-        for i in range(len(BUOYS) - 1):
-            b_start = BUOYS[i]
-            b_end   = BUOYS[i + 1]
-            avg_val = (algae_map[b_start["id"]] + algae_map[b_end["id"]]) / 2
-
-            # Rivierlijn langs werkelijke loop (OSM waypoints)
-            seg_pts = get_river_segment(i, i + 1)
-            if seg_pts:
-                seg_lats = [b_start["lat"]] + [c[0] for c in seg_pts] + [b_end["lat"]]
-                seg_lons = [b_start["lon"]] + [c[1] for c in seg_pts] + [b_end["lon"]]
-            else:
-                seg_lats = [b_start["lat"], b_end["lat"]]
-                seg_lons = [b_start["lon"], b_end["lon"]]
-
-            # Glow lagen per segment
-            for width, frac in [(14, 0.06), (8, 0.15), (4, 0.4), (2, 1.0)]:
-                fig_map.add_trace(go.Scattermapbox(
-                    lat=seg_lats,
-                    lon=seg_lons,
-                    mode="lines",
-                    line=dict(width=width, color=algae_to_color(avg_val, frac)),
-                    hoverinfo="skip", showlegend=False,
-                ))
-
-        # Buoy markers met pulse-ring effect (grote halftransparante cirkel + solide kern)
-        for buoy, color in zip(BUOYS, dot_colors):
-            row = latest[latest["buoy_id"] == buoy["id"]].iloc[0]
-            r, g, b_ = (
-                (39, 174, 96) if color == C_GREEN else
-                (243, 156, 18) if color == C_YELLOW else
-                (192, 57, 43)
-            )
-            # Pulse ring
-            fig_map.add_trace(go.Scattermapbox(
-                lat=[buoy["lat"]], lon=[buoy["lon"]],
-                mode="markers",
-                marker=dict(size=30, color=f"rgba({r},{g},{b_},0.18)"),
-                customdata=[buoy["id"]],
-                hoverinfo="skip", showlegend=False,
-            ))
-            # Kern — customdata bevat buoy ID voor click-interactie
-            _tpos = "top center"
-            fig_map.add_trace(go.Scattermapbox(
-                lat=[buoy["lat"]], lon=[buoy["lon"]],
-                mode="markers+text",
-                marker=dict(size=14, color=color, symbol="circle"),
-                text=[buoy["id"]],
-                textposition=_tpos,
-                textfont=dict(size=14, color="#000000"),
-                customdata=[buoy["id"]],
-                name=buoy["name"],
-                hovertemplate=(
-                    f"<b>{buoy['id']} — {buoy['name']}</b><br>"
-                    f"Algen: <b>{row['algae']} μg/L</b><br>"
-                    f"Geosmin: <b>{row['geosmin']} ng/L</b><br>"
-                    f"Temp: {row['temp']} °C  |  O₂: {row['oxygen']} mg/L  |  pH: {row['ph']}"
-                    "<extra></extra>"
-                ),
-                showlegend=False,
-            ))
-
-        fig_map.update_layout(
-            mapbox=dict(
-                style="open-street-map",
-                center=dict(lat=-22.690, lon=-43.750),
-                zoom=10,
-            ),
-            margin=dict(l=0, r=0, t=0, b=0),
-            height=620,
-        )
-        map_event = st.plotly_chart(fig_map, use_container_width=True,
-                                     on_select="rerun", selection_mode="points",
-                                     key="buoy_map")
-        if map_event and map_event.selection and map_event.selection.points:
-            pt = map_event.selection.points[0]
-            cdata = pt.get("customdata")
-            if cdata and cdata in [b["id"] for b in BUOYS]:
-                if st.session_state.selected_buoy != cdata:
-                    st.session_state.selected_buoy = cdata
-                    st.rerun()
-
-        st.markdown(
-            f'<span style="font-size:11px;color:{C_MUTED};">'
-            f'<b>Klik op een boei</b> om te selecteren &nbsp;·&nbsp; '
-            f'<span style="color:{C_GREEN}">●</span> Normaal  '
-            f'<span style="color:{C_YELLOW}">●</span> Verhoogd (>40 μg/L)  '
-            f'<span style="color:{C_RED}">●</span> Alarm (>70 μg/L)</span>',
-            unsafe_allow_html=True
-        )
-
-        # ── 3D Rivier visualisatie ─────────────────────────────────────────────
-        st.markdown('<p class="section-label" style="margin-top:16px;">3D rivierprofiel — algenconcentratie per locatie</p>',
-                    unsafe_allow_html=True)
-
-        buoy_lons   = [b["lon"] for b in BUOYS]
-        buoy_lats   = [b["lat"] for b in BUOYS]
-        algae_vals  = [latest[latest["buoy_id"] == b["id"]]["algae"].values[0] for b in BUOYS]
-        buoy_names  = [b["name"] for b in BUOYS]
-        buoy_ids    = [b["id"] for b in BUOYS]
-
-        # Interpoleer een vloeiende rivier (meer punten tussen de buoys)
-        from scipy.interpolate import interp1d
-        t       = np.linspace(0, 1, len(BUOYS))
-        t_fine  = np.linspace(0, 1, 80)
-        lon_interp    = interp1d(t, buoy_lons,  kind="cubic")(t_fine)
-        lat_interp    = interp1d(t, buoy_lats,  kind="cubic")(t_fine)
-        algae_interp  = interp1d(t, algae_vals, kind="cubic")(t_fine)
-        algae_interp  = np.clip(algae_interp, 0, 120)
-
-        fig_3d = go.Figure()
-
-        # Rivier bodem (plat vlak op z=0)
-        fig_3d.add_trace(go.Scatter3d(
-            x=lon_interp, y=lat_interp, z=np.zeros(len(t_fine)),
-            mode="lines",
-            line=dict(color="rgba(0,80,120,0.4)", width=8),
-            name="Rivierbedding", showlegend=False,
-            hoverinfo="skip",
-        ))
-
-        # Verticale "muren" van buoy naar oppervlak — geeft diepte-effect
-        for i, (buoy, val) in enumerate(zip(BUOYS, algae_vals)):
-            fig_3d.add_trace(go.Scatter3d(
-                x=[buoy["lon"], buoy["lon"]],
-                y=[buoy["lat"], buoy["lat"]],
-                z=[0, val],
-                mode="lines",
-                line=dict(color="rgba(200,200,200,0.3)", width=2, dash="dot"),
-                showlegend=False, hoverinfo="skip",
-            ))
-
-        # 3D rivierlijn gekleurd op algenconcentratie
-        fig_3d.add_trace(go.Scatter3d(
-            x=lon_interp, y=lat_interp, z=algae_interp,
-            mode="lines",
-            line=dict(
-                color=algae_interp,
-                colorscale=[[0, "#00BFFF"], [0.33, "#27AE60"],
-                            [0.66, "#F39C12"], [1.0, "#C0392B"]],
-                width=8,
-                cmin=0, cmax=100,
-            ),
-            name="Algenconcentratie", showlegend=False,
-            hoverinfo="skip",
-        ))
-
-        # Buoy bollen op de 3D lijn
-        marker_colors = [
-            "#27AE60" if status(v, "algae") == "ok" else
-            "#F39C12" if status(v, "algae") == "warn" else "#C0392B"
-            for v in algae_vals
-        ]
-        fig_3d.add_trace(go.Scatter3d(
-            x=buoy_lons, y=buoy_lats, z=algae_vals,
-            mode="markers+text",
-            marker=dict(size=8, color=marker_colors,
-                        line=dict(color="white", width=1.5)),
-            text=buoy_ids,
-            textposition="top center",
-            textfont=dict(size=10, color="white"),
-            name="Buoys",
-            hovertemplate=[
-                f"<b>{bid} — {name}</b><br>Algen: <b>{val:.1f} μg/L</b><extra></extra>"
-                for bid, name, val in zip(buoy_ids, buoy_names, algae_vals)
-            ],
-        ))
-
-        # Drempelgrens vlak (40 μg/L)
-        fig_3d.add_trace(go.Scatter3d(
-            x=lon_interp, y=lat_interp, z=[40] * len(t_fine),
-            mode="lines",
-            line=dict(color="rgba(243,156,18,0.5)", width=3, dash="dot"),
-            name="Waarschuwingsgrens (40)", showlegend=True,
-            hoverinfo="skip",
-        ))
-
-        fig_3d.update_layout(
-            scene=dict(
-                xaxis=dict(title="Lengtegraad", backgroundcolor="#0D1B2A",
-                           gridcolor="#1E3A5F", zerolinecolor="#1E3A5F",
-                           tickfont=dict(size=9, color="#94A3B8")),
-                yaxis=dict(title="Breedtegraad", backgroundcolor="#0D1B2A",
-                           gridcolor="#1E3A5F", zerolinecolor="#1E3A5F",
-                           tickfont=dict(size=9, color="#94A3B8")),
-                zaxis=dict(title="Algen (μg/L)", backgroundcolor="#0D1B2A",
-                           gridcolor="#1E3A5F", zerolinecolor="#1E3A5F",
-                           tickfont=dict(size=9, color="#94A3B8"), range=[0, 110]),
-                bgcolor="#0D1B2A",
-                camera=dict(eye=dict(x=1.8, y=-1.8, z=1.2)),
-                aspectmode="manual",
-                aspectratio=dict(x=2.5, y=1, z=0.6),
-            ),
-            paper_bgcolor="#0D1B2A",
-            plot_bgcolor="#0D1B2A",
-            font=dict(color="#94A3B8"),
-            margin=dict(l=0, r=0, t=0, b=0),
-            height=420,
-            legend=dict(font=dict(color="#94A3B8", size=10),
-                        bgcolor="rgba(0,0,0,0)"),
-        )
-        st.plotly_chart(fig_3d, use_container_width=True)
-        st.caption("Draai de grafiek met je muis · hoogte = algenconcentratie · kleur: blauw=laag → rood=hoog")
+        st.markdown('<p class="section-label">Live algenconcentratie — 3D kaart</p>', unsafe_allow_html=True)
+        _live_algae = {b["id"]: float(latest[latest["buoy_id"]==b["id"]]["algae"].values[0])
+                       for b in BUOYS}
+        st.plotly_chart(render_terrain_3d(_live_algae, height=620),
+                        use_container_width=True)
+        st.markdown(f"""
+        <div style="display:flex;gap:20px;font-size:11px;color:{C_MUTED};margin-top:4px;">
+          <span><span style="color:{C_GREEN};font-weight:700;">●</span> Normaal (&lt;30 μg/L)</span>
+          <span><span style="color:{C_YELLOW};font-weight:700;">●</span> Verhoogd (30–60 μg/L)</span>
+          <span><span style="color:{C_RED};font-weight:700;">●</span> Alarm (&gt;60 μg/L)</span>
+          <span>Rivier: groen→rood = algenconcentratie · draai met muis</span>
+        </div>""", unsafe_allow_html=True)
 
     with col_right:
         st.markdown('<p class="section-label">Live status</p>', unsafe_allow_html=True)
@@ -1029,19 +1031,19 @@ with tab1:
                   {'ALARM' if overall=='alert' else 'WAARSCH.' if overall=='warn' else 'OK'}
                 </span>
               </div>
-              <div style="font-size:11px; color:{C_MUTED}; margin-bottom:5px;">{buoy_name}</div>
+              <div style="font-size:11px; color:#475569; margin-bottom:5px;">{buoy_name}</div>
               <div style="display:flex; justify-content:space-between;">
                 <div>
-                  <div style="font-size:10px; color:{C_MUTED};">Algen</div>
-                  <div style="font-size:12px; font-weight:600; color:{C_DARK};">{row['algae']} <span style="font-size:9px; color:{C_MUTED};">μg/L</span></div>
+                  <div style="font-size:10px; color:#64748B;">Algen</div>
+                  <div style="font-size:12px; font-weight:600; color:{C_DARK};">{row['algae']} <span style="font-size:9px; color:#64748B;">μg/L</span></div>
                 </div>
                 <div>
-                  <div style="font-size:10px; color:{C_MUTED};">Geosmin</div>
-                  <div style="font-size:12px; font-weight:600; color:{C_DARK};">{row['geosmin']} <span style="font-size:9px; color:{C_MUTED};">ng/L</span></div>
+                  <div style="font-size:10px; color:#64748B;">Geosmin</div>
+                  <div style="font-size:12px; font-weight:600; color:{C_DARK};">{row['geosmin']} <span style="font-size:9px; color:#64748B;">ng/L</span></div>
                 </div>
                 <div>
-                  <div style="font-size:10px; color:{C_MUTED};">O₂</div>
-                  <div style="font-size:12px; font-weight:600; color:{C_DARK};">{row['oxygen']} <span style="font-size:9px; color:{C_MUTED};">mg/L</span></div>
+                  <div style="font-size:10px; color:#64748B;">O₂</div>
+                  <div style="font-size:12px; font-weight:600; color:{C_DARK};">{row['oxygen']} <span style="font-size:9px; color:#64748B;">mg/L</span></div>
                 </div>
               </div>
             </div>
@@ -1211,6 +1213,33 @@ with tab3:
     notr_vals  = [anchor_val]  + df_no_treat["algae"].tolist()
     upper = [anchor_val] + (df_pred["algae"] * 1.12).tolist()
     lower = [anchor_val] + (df_pred["algae"] * 0.88).tolist()
+
+    # ── 3D Algenvoorspelling kaart — bovenaan ─────────────────────────────────
+    _forecast_algae = {}
+    for _b in BUOYS:
+        _df_b_tmp = df[df["buoy_id"] == _b["id"]].copy()
+        _pred_tmp = predict_xgb(_df_b_tmp, xgb_models, _b["id"],
+                                forecast_days, temp_offset, rain_factor,
+                                discharge, treatment)
+        _forecast_algae[_b["id"]] = float(_pred_tmp["algae"].iloc[-1])
+
+    st.markdown(f'<p class="section-label" style="margin-top:4px;text-align:left;">3D algenvoorspelling — dag {forecast_days} van de horizon</p>',
+                unsafe_allow_html=True)
+    st.caption(f"parameters: +{temp_offset}°C · regen ×{rain_factor:.1f} · lozing ×{discharge:.1f} · LG Sonic {int(treatment*100)}%")
+    st.plotly_chart(
+        render_terrain_3d(
+            _forecast_algae,
+            title=f"Algenvoorspelling dag {forecast_days} — scenario simulator",
+            height=560,
+        ),
+        use_container_width=True,
+    )
+    st.markdown(f"""
+    <div style="display:flex;gap:20px;font-size:11px;margin-top:4px;margin-bottom:20px;">
+      <span><span style="color:{C_GREEN};font-weight:700;">●</span> Normaal (&lt;30 μg/L)</span>
+      <span><span style="color:{C_YELLOW};font-weight:700;">●</span> Verhoogd (30–60 μg/L)</span>
+      <span><span style="color:{C_RED};font-weight:700;">●</span> Alarm (&gt;60 μg/L)</span>
+    </div>""", unsafe_allow_html=True)
 
     fig_f = go.Figure()
     # Onbehandeld (grijs) — referentie
@@ -1544,3 +1573,78 @@ with tab5:
                 unsafe_allow_html=True
             )
         st.markdown("</div>", unsafe_allow_html=True)
+
+
+if False:
+    # tab6 verwijderd
+    st.markdown('<p class="section-label">3D terreinvisualisatie — Guandu rivier</p>', unsafe_allow_html=True)
+
+    _live_algae_t6 = {b["id"]: float(latest[latest["buoy_id"]==b["id"]]["algae"].values[0])
+                      for b in BUOYS}
+    st.plotly_chart(render_terrain_3d(_live_algae_t6,
+                                      title="3D Terrein — Guandu rivier & MPC-Buoys",
+                                      height=640),
+                    use_container_width=True)
+
+    st.markdown(f"""
+    <div style="display:flex;gap:24px;justify-content:center;margin-top:8px;
+                font-size:12px;color:{C_MUTED};">
+      <span><span style="color:{C_GREEN};font-weight:700;">●</span> Normaal (&lt;30 μg/L)</span>
+      <span><span style="color:{C_YELLOW};font-weight:700;">●</span> Verhoogd (30–60 μg/L)</span>
+      <span><span style="color:{C_RED};font-weight:700;">●</span> Alarm (&gt;60 μg/L)</span>
+      <span><span style="color:{C_GREEN};font-weight:700;">—</span>/<span style="color:{C_RED};font-weight:700;">—</span> Rivier kleur = algen</span>
+      <span><span style="color:#4A4A6A;font-weight:700;">- -</span> Rivierbodem</span>
+    </div>""", unsafe_allow_html=True)
+
+    # ── Diepteprofiel chart ──────────────────────────────────────────────────────
+    st.markdown('<p class="section-label" style="margin-top:20px;">Diepteprofiel langs de rivier</p>',
+                unsafe_allow_html=True)
+
+    from math import radians, cos, sin, asin, sqrt as _sqrt
+    def _haversine_m(la1, lo1, la2, lo2):
+        R = 6371000
+        a = sin(radians(la2-la1)/2)**2 + cos(radians(la1))*cos(radians(la2))*sin(radians(lo2-lo1)/2)**2
+        return 2*R*asin(_sqrt(a))
+
+    _dist_km = [0.0]
+    for _i in range(1, len(_t_r_lats)):
+        _dist_km.append(_dist_km[-1] + _haversine_m(_t_r_lats[_i-1], _t_r_lons[_i-1],
+                                                     _t_r_lats[_i],   _t_r_lons[_i]) / 1000)
+
+    _buoy_dist_t6, _buoy_depth_mid = [], []
+    for _b in _t_buoys_3d:
+        _idx = min(range(len(_t_r_lats)),
+                   key=lambda i: (_t_r_lats[i]-_b["lat"])**2+(_t_r_lons[i]-_b["lon"])**2)
+        _buoy_dist_t6.append(_dist_km[_idx])
+        _buoy_depth_mid.append(-_t_r_depth[_idx] / 2)
+
+    _algae_color_t6 = [C_GREEN if _live_algae_t6.get(_b["id"],20)<30
+                       else C_YELLOW if _live_algae_t6.get(_b["id"],20)<60
+                       else C_RED for _b in _t_buoys_3d]
+
+    fig_depth = go.Figure()
+    fig_depth.add_trace(go.Scatter(x=_dist_km, y=[0.0]*len(_dist_km), mode="lines",
+                                   line=dict(color=C_BLUE, width=2), name="Wateroppervlak"))
+    fig_depth.add_trace(go.Scatter(x=_dist_km, y=[-d for d in _t_r_depth], mode="lines",
+                                   line=dict(color="#023E8A", width=1.5),
+                                   fill="tonexty", fillcolor="rgba(0,150,199,0.35)",
+                                   name="Rivierbodem"))
+    fig_depth.add_trace(go.Scatter(x=_buoy_dist_t6, y=_buoy_depth_mid,
+                                   mode="markers+text",
+                                   marker=dict(size=10, color=_algae_color_t6,
+                                               line=dict(color=C_WHITE, width=1)),
+                                   text=[_b["id"] for _b in _t_buoys_3d],
+                                   textposition="top center",
+                                   textfont=dict(size=9, color=C_TEXT),
+                                   customdata=[[_b["name"]] for _b in _t_buoys_3d],
+                                   hovertemplate="<b>%{text}</b> — %{customdata[0]}<br>%{x:.1f} km<extra></extra>",
+                                   name="Buoys"))
+    fig_depth.update_layout(**CHART, height=200, margin=dict(l=12,r=12,t=20,b=40),
+                            xaxis=dict(title="Afstand (km)", showgrid=False, linecolor=C_BORDER),
+                            yaxis=dict(title="Diepte (m)", tickvals=[0,-2,-4,-6,-8],
+                                       ticktext=["0","2","4","6","8"],
+                                       gridcolor="#EEF2F6", zeroline=True,
+                                       zerolinecolor=C_BLUE, zerolinewidth=1.5),
+                            showlegend=False)
+    st.plotly_chart(fig_depth, use_container_width=True)
+    st.caption("Dieptedata: synthetisch model (1–8 m) · echte bathymetrische data koppelen zodra beschikbaar.")
