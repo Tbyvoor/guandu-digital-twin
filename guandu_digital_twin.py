@@ -963,16 +963,22 @@ def render_terrain_3d(algae_per_buoy: dict, title: str = "", height: int = 580) 
         x=_t_r_lons, y=_t_r_lats, z=_t_r_elev,
         mode="lines",
         line=dict(color=r_algae,
-                  colorscale=[[0.0,"#27AE60"],[0.35,"#F1C40F"],
-                               [0.65,"#E67E22"],[1.0,"#C0392B"]],
+                  colorscale=[[0.0,"#1E90FF"],[0.25,"#27AE60"],[0.5,"#F1C40F"],
+                               [0.75,"#E67E22"],[1.0,"#C0392B"]],
                   cmin=0, cmax=80, width=7,
                   colorbar=dict(title=dict(text="Algen (μg/L)", font=dict(color="#94A3B8",size=10)),
                                 thickness=10, len=0.45, x=0.0,
                                 tickfont=dict(color="#94A3B8",size=9),
                                 tickvals=[0,20,40,60,80])),
         name="Wateroppervlak",
+        showlegend=False,
         customdata=[[r_algae[i], _t_r_depth[i]] for i in range(len(r_algae))],
         hovertemplate="Algen: %{customdata[0]:.1f} μg/L<br>Diepte: %{customdata[1]:.1f} m<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter3d(
+        x=[None], y=[None], z=[None], mode="lines",
+        line=dict(color="#1E90FF", width=7),
+        name="Wateroppervlak", showlegend=True,
     ))
 
     # Rivierbodem
