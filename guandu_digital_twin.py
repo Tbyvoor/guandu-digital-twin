@@ -1384,7 +1384,7 @@ with tab3:
     geo_colors = [C_RED if v > 50 else C_YELLOW if v > 20 else C_BLUE for v in df_pred["geosmin"]]
     fig_g = go.Figure(go.Bar(
         x=df_pred["date"], y=df_pred["geosmin"],
-        marker_color=geo_colors, name="Geosmin",
+        marker_color=geo_colors, name="Geosmin", opacity=0.6,
         hovertemplate="%{y:.1f} ng/L<extra></extra>",
     ))
     fig_g.add_hline(y=20, line_dash="dot", line_color=C_YELLOW,
@@ -1550,9 +1550,9 @@ with tab4:
     df_r = pd.DataFrame(res)
     fig_b = go.Figure()
     fig_b.add_trace(go.Bar(x=df_r["Buoy"], y=df_r["Baseline"], name="Baseline",
-                            marker_color=C_BLUE, opacity=0.85))
+                            marker_color=C_BLUE, opacity=0.6))
     fig_b.add_trace(go.Bar(x=df_r["Buoy"], y=df_r["Scenario"], name="Scenario",
-                            marker_color=C_ORANGE, opacity=0.85))
+                            marker_color=C_ORANGE, opacity=0.6))
     fig_b.add_hline(y=40, line_dash="dot", line_color=C_YELLOW)
     fig_b.add_hline(y=70, line_dash="dot", line_color=C_RED)
     style(fig_b, height=280, title="")
