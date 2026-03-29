@@ -1354,21 +1354,23 @@ with tab3:
     st.plotly_chart(fig_f, use_container_width=True)
 
     # ── Behandelingseffect samenvatting ───────────────────────────────────────
-    besparing = df_no_treat["algae"].max() - df_pred["algae"].max()
-    pct = (besparing / max(df_no_treat["algae"].max(), 0.1)) * 100
+    gem_zonder = df_no_treat["algae"].mean()
+    gem_met    = df_pred["algae"].mean()
+    besparing  = gem_zonder - gem_met
+    pct = (besparing / max(gem_zonder, 0.1)) * 100
     st.markdown(f"""
     <div style="background:{C_CHART_BG}; border:1px solid #1E3A5F; border-radius:8px;
                 padding:14px 20px; display:flex; gap:32px; align-items:center; margin-bottom:16px;">
       <div style="text-align:center;">
         <div style="font-size:11px; color:#94A3B8; font-weight:600; text-transform:uppercase;">Zonder behandeling</div>
-        <div style="font-size:22px; font-weight:700; color:{C_RED};">{df_no_treat['algae'].max():.1f} <span style="font-size:13px;">μg/L</span></div>
-        <div style="font-size:11px; color:#94A3B8;">piek verwacht</div>
+        <div style="font-size:22px; font-weight:700; color:{C_RED};">{gem_zonder:.1f} <span style="font-size:13px;">μg/L</span></div>
+        <div style="font-size:11px; color:#94A3B8;">gemiddeld verwacht</div>
       </div>
       <div style="font-size:28px; color:#94A3B8;">→</div>
       <div style="text-align:center;">
         <div style="font-size:11px; color:#94A3B8; font-weight:600; text-transform:uppercase;">Met LG Sonic ({int(treatment*100)}%)</div>
-        <div style="font-size:22px; font-weight:700; color:{C_GREEN};">{df_pred['algae'].max():.1f} <span style="font-size:13px;">μg/L</span></div>
-        <div style="font-size:11px; color:#94A3B8;">piek verwacht</div>
+        <div style="font-size:22px; font-weight:700; color:{C_GREEN};">{gem_met:.1f} <span style="font-size:13px;">μg/L</span></div>
+        <div style="font-size:11px; color:#94A3B8;">gemiddeld verwacht</div>
       </div>
       <div style="text-align:center; background:#0D2818; border-radius:8px; padding:10px 16px;">
         <div style="font-size:11px; color:#94A3B8; font-weight:600; text-transform:uppercase;">Reductie</div>
