@@ -184,6 +184,34 @@ st.markdown(f"""
     background: #1A2E45 !important;
   }}
 
+  /* Tab3 buoy radio pills */
+  div[data-testid="stRadio"]:has(label[data-testid="stWidgetLabel"]) {{
+    background: transparent !important;
+  }}
+  div[data-testid="stRadio"] label {{
+    background: {C_CHART_BG} !important;
+    border: 1px solid #1E3A5F !important;
+    border-radius: 20px !important;
+    color: #94A3B8 !important;
+    padding: 4px 14px !important;
+    font-size: 12px !important;
+    cursor: pointer !important;
+    transition: all 0.15s !important;
+  }}
+  div[data-testid="stRadio"] label:has(input:checked) {{
+    background: {C_BLUE} !important;
+    border-color: {C_BLUE} !important;
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+  }}
+  div[data-testid="stRadio"] label:hover {{
+    border-color: {C_BLUE} !important;
+    color: #FFFFFF !important;
+  }}
+  div[data-testid="stRadio"] input[type="radio"] {{
+    display: none !important;
+  }}
+
   /* Hide streamlit branding */
   #MainMenu, footer {{ visibility: hidden; }}
 </style>
@@ -1215,9 +1243,6 @@ with tab2:
 # ────────────────────────────────────────────────────────────────────────────────
 with tab3:
     buoy_name_sel = next(b["name"] for b in BUOYS if b["id"] == selected_buoy)
-    st.markdown(
-        f'<p class="section-label">{selected_buoy} — {buoy_name_sel} · {forecast_days}-daagse voorspelling</p>',
-        unsafe_allow_html=True)
 
     df_b  = df[df["buoy_id"] == selected_buoy].copy()
     hist14 = df_b.tail(14)
@@ -1259,6 +1284,20 @@ with tab3:
         ),
         use_container_width=True,
     )
+    # Buoy selector below the 3D map
+    _buoy_ids = [b["id"] for b in BUOYS]
+    _radio_sel = st.radio(
+        "Selecteer boei",
+        label_visibility="collapsed",
+        options=_buoy_ids,
+        format_func=lambda x: f"{x}  {next(b['name'] for b in BUOYS if b['id']==x)}",
+        index=_buoy_ids.index(st.session_state.selected_buoy),
+        horizontal=True,
+        key="tab3_buoy_radio",
+    )
+    if _radio_sel != st.session_state.selected_buoy:
+        st.session_state.selected_buoy = _radio_sel
+        st.rerun()
     st.markdown(f"""
     <div style="display:flex;gap:20px;font-size:11px;margin-top:4px;margin-bottom:20px;">
       <span><span style="color:{C_GREEN};font-weight:700;">●</span> Normaal (&lt;30 μg/L)</span>
